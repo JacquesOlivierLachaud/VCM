@@ -78,20 +78,19 @@ using namespace DGtal;
 
 int main( int /*argc*/, char** /*argv*/ )
 {
-  trace.beginBlock ( "Example voronoimap2D" );
 
   Metric l2;
 
-  //! [Voro2D-SmallImage]
   Z2i::Point lower(0,0);
   Z2i::Point upper(16,16);
   Z2i::Domain domain(lower,upper);
 
+  // Définit les points de X.
   CharacteristicSet charSet( domain );
   charSet.setValue( Point(2,3), true );
   charSet.setValue( Point(7,15), true );
   charSet.setValue( Point(12,5), true );
-  charSet.setValue( Point(14, 10), true );
+  charSet.setValue( Point(14,10), true );
   Board2D board;
 
   board<< domain;
@@ -99,20 +98,18 @@ int main( int /*argc*/, char** /*argv*/ )
         it != itE; ++it )
     if ( charSet( *it ) ) board << *it;
   board.saveSVG("voronoimap-inputset.svg");
-  //! [Voro2D-SmallImage]
 
-  //! [Voro2D-Predicate]
+  // Le diagramme de Voronoi est calculé sur le complément de X.
   CharacteristicSetPredicate inCharSet( charSet );
   typedef NotPointPredicate<CharacteristicSetPredicate> NotPredicate;
   NotPredicate notSetPred( inCharSet);
-  //! [Voro2D-Predicate]
 
-  //! [Voro2D-Voro]
+  trace.beginBlock ( "Calcul du diagramme de Voronoi 2D" );
   typedef VoronoiMap<Z2i::Space, NotPredicate, Metric > Voronoi2D;
   Voronoi2D voronoimap(domain,notSetPred,l2);
-  //! [Voro2D-Voro]
+  trace.endBlock();
 
-  //! [Voro2D-trace]
+  // On affiche le vecteur vers le site le plus proche.
   board.clear();
   board << domain;
   for(Voronoi2D::Domain::ConstIterator it = voronoimap.domain().begin(),
@@ -123,36 +120,25 @@ int main( int /*argc*/, char** /*argv*/ )
       Display2DFactory::draw( board,   site - (*it), (*it)); //Draw an arrow
   }
   board.saveSVG("voronoimap-voro.svg");
-  //! [Voro2D-trace]
 
-  //! [Voro2D-DT]
-  typedef DistanceTransformation<Z2i::Space, NotPredicate, Metric > DT;
-  DT dt(domain,notSetPred,l2);
+  // On affiche le vecteur vers le site le plus proche seulement si il est à distance <= 4.
   board.clear();
   board << domain;
-
-  //Fast max computation on the range value
-  DT::Value maxDT=0.0;
-  for(DT::ConstRange::ConstIterator it = dt.constRange().begin(), itend = dt.constRange().end();
-      it != itend ; ++it)
-    if ((*it)>maxDT) maxDT = (*it);
-
-  //Colormap
-  HueShadeColorMap<DT::Value,1> hueMap(0.0,maxDT);
-
-  //Drawing
-  for(DT::Domain::ConstIterator it = dt.domain().begin(),
-      itend = dt.domain().end(); it != itend; ++it)
+  for(Voronoi2D::Domain::ConstIterator it = voronoimap.domain().begin(),
+      itend = voronoimap.domain().end(); it != itend; ++it)
   {
-    DT::Value dist = dt( *it );   //distance to closest site to (*it)
-    board << CustomStyle( (*it).className(), new CustomColors( hueMap(dist), hueMap(dist)))
-          << (*it);
+    Voronoi2D::Value site = voronoimap( *it );   //closest site to (*it)
+    if (site != (*it))
+      {
+        double d = l2( site, *it );
+        if( d <= 4.0 )
+        { 
+            Display2DFactory::draw( board,   site - (*it), (*it)); //Draw an arrow
+        }
+      }
   }
-  board.saveSVG("voronoimap-dt.svg");
-  //! [Voro2D-DT]
+  board.saveSVG("voronoimap-voro-4.svg");
 
-
-  trace.endBlock();
   return 0;
 }
 //                                                                           //
