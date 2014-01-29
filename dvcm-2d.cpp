@@ -29,6 +29,10 @@
 
 ///////////////////////////////////////////////////////////////////////////////
 #include <iostream>
+#include <boost/program_options/options_description.hpp>
+#include <boost/program_options/parsers.hpp>
+#include <boost/program_options/variables_map.hpp>
+
 #include "DGtal/base/Common.h"
 #include "DGtal/helpers/StdDefs.h"
 
@@ -75,29 +79,76 @@ private:
 using namespace DGtal;
 
 ///////////////////////////////////////////////////////////////////////////////
-
-int main( int /*argc*/, char** /*argv*/ )
+int main( int argc, char** argv )
 {
 
-  Metric l2;
+  // parse command line ----------------------------------------------
+  namespace po = boost::program_options;
+  po::options_description general_opt("Allowed options are: ");
+  general_opt.add_options()
+    ("help,h", "display this message")
+    ("input,i", po::value<std::string>(), "name of the file containing 2d discrete points (.sdp) " )
+    ("big-radius,R", po::value<int>()->default_value( 4 ), "the parameter R in the VCM." )
+    ;  
+  bool parseOK=true;
+  po::variables_map vm;
+  try{
+    po::store(po::parse_command_line(argc, argv, general_opt), vm);  
+  }catch(const std::exception& ex){
+    parseOK=false;
+    trace.info()<< "Error checking program options: "<< ex.what()<< endl;
+  }
+  po::notify(vm);    
+  if( !parseOK || vm.count("help"))
+    {
+      std::cout << "Usage: " << argv[0] << " -i [file.sdp]\n"
+		<< "Reads a set of points and computes a Voronoi map."
+		<< general_opt << "\n";
+      std::cout << "Example:\n"
+		<< "dvcm-2d -i ellipse.sdp \n";
+      return 0;
+    }
+  if(! vm.count("input"))
+    {
+      trace.error() << " Input filename is required." << endl;      
+      return 0;
+    }
+  
+  int R = vm["big-radius"].as<int>();
 
-  Z2i::Point lower(0,0);
-  Z2i::Point upper(16,16);
-  Z2i::Domain domain(lower,upper);
+  // Récupère les points.
+  vector<unsigned int> vPos;
+  vPos.push_back(0);
+  vPos.push_back(1);
+  std::string inputSDP = vm["input"].as<std::string>();
+  trace.info() << "Reading input 2d discrete points file: " << inputSDP; 
+  std::vector<Point> vectPoints=  PointListReader<Point>::getPointsFromFile(inputSDP, vPos); 
+  trace.info() << " [done] " << std::endl ; 
+
+  // Calcule le domaine englobant.
+  Point lower = *vectPoints.begin();
+  Point upper = *vectPoints.begin();
+  for ( std::vector<Point>::const_iterator it = vectPoints.begin()+1, itE = vectPoints.end();
+        it != itE; ++it )
+    {
+      lower = lower.inf( *it );
+      upper = upper.sup( *it );
+    }
+  lower -= Point::diagonal( R );
+  upper += Point::diagonal( R );
+  Domain domain( lower, upper );
 
   // Définit les points de X.
   CharacteristicSet charSet( domain );
-  charSet.setValue( Point(2,3), true );
-  charSet.setValue( Point(7,15), true );
-  charSet.setValue( Point(12,5), true );
-  charSet.setValue( Point(14,10), true );
-  Board2D board;
+  for ( std::vector<Point>::const_iterator it = vectPoints.begin(), itE = vectPoints.end();
+        it != itE; ++it )
+    charSet.setValue( *it, true );
 
-  board<< domain;
+  // Display input set.
+  Board2D board;
   for ( Domain::ConstIterator it = domain.begin(), itE = domain.end();
         it != itE; ++it )
     if ( charSet( *it ) ) board << *it;
-  board.saveSVG("voronoimap-inputset.svg");
 
   // Le diagramme de Voronoi est calculé sur le complément de X.
   CharacteristicSetPredicate inCharSet( charSet );
@@ -106,24 +157,13 @@ int main( int /*argc*/, char** /*argv*/ )
 
   trace.beginBlock ( "Calcul du diagramme de Voronoi 2D" );
   typedef VoronoiMap<Z2i::Space, NotPredicate, Metric > Voronoi2D;
+  Metric l2;
   Voronoi2D voronoimap(domain,notSetPred,l2);
   trace.endBlock();
 
-  // On affiche le vecteur vers le site le plus proche.
-  board.clear();
-  board << domain;
-  for(Voronoi2D::Domain::ConstIterator it = voronoimap.domain().begin(),
-      itend = voronoimap.domain().end(); it != itend; ++it)
-  {
-    Voronoi2D::Value site = voronoimap( *it );   //closest site to (*it)
-    if (site != (*it))
-      Display2DFactory::draw( board,   site - (*it), (*it)); //Draw an arrow
-  }
-  board.saveSVG("voronoimap-voro.svg");
-
   // On affiche le vecteur vers le site le plus proche seulement si il est à distance <= 4.
-  board.clear();
-  board << domain;
+  // board.clear();
+  // board << domain;
   for(Voronoi2D::Domain::ConstIterator it = voronoimap.domain().begin(),
       itend = voronoimap.domain().end(); it != itend; ++it)
   {
@@ -131,13 +171,13 @@ int main( int /*argc*/, char** /*argv*/ )
     if (site != (*it))
       {
         double d = l2( site, *it );
-        if( d <= 4.0 )
+        if( d <= (double)R )
         { 
             Display2DFactory::draw( board,   site - (*it), (*it)); //Draw an arrow
         }
       }
   }
-  board.saveSVG("voronoimap-voro-4.svg");
+  board.saveSVG("voronoimap-voro-R.svg");
 
   return 0;
 }
