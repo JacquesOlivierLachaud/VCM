@@ -38,6 +38,7 @@
 
 //! [Voro2D-header]
 #include "DGtal/kernel/BasicPointPredicates.h"
+#include "DGtal/kernel/SimpleMatrix.h"
 #include "DGtal/images/ImageContainerBySTLVector.h"
 #include "DGtal/images/imagesSetsUtils/SimpleThresholdForegroundPredicate.h"
 #include "DGtal/geometry/volumes/distance/ExactPredicateLpSeparableMetric.h"
@@ -57,9 +58,11 @@ typedef DGtal::Z3i::Space Space;
 typedef DGtal::Z3i::Vector Vector;
 typedef DGtal::Z3i::Point Point;
 typedef DGtal::Z3i::RealPoint RealPoint;
+typedef DGtal::Z3i::RealVector RealVector;
 typedef DGtal::HyperRectDomain<Space> Domain;
 typedef DGtal::ImageContainerBySTLVector<Domain,bool> CharacteristicSet;
 typedef DGtal::ExactPredicateLpSeparableMetric<Space, 3> Metric; // L2-metric
+typedef DGtal::SimpleMatrix<double,3,3> Matrix3;
 
 // Model of CPointPredicate
 struct CharacteristicSetPredicate {
@@ -77,6 +80,8 @@ struct CharacteristicSetPredicate {
 private:
   const CharacteristicSet* ptrSet;
 };
+
+
 
 using namespace DGtal;
 
@@ -168,12 +173,50 @@ int main( int argc, char** argv )
   Voronoi3D voronoimap(domain,notSetPred,l2);
   trace.endBlock();
 
+  trace.beginBlock ( "Calcul du VCM" );
+  // Calcul du VCM
+  typedef std::map<Point,Matrix3> PT2VCM;
+  PT2VCM pt2vcm;   // mapping point -> VCM
+  Matrix3 m; // zero matrix
+  for ( std::vector<Point>::const_iterator it = vectPoints.begin(), itE = vectPoints.end();
+        it != itE; ++it )
+    pt2vcm[ *it ] = m;
+  // On parcourt le domaine pour calculer le VCM.
+  for(Voronoi3D::Domain::ConstIterator it = voronoimap.domain().begin(),
+        itend = voronoimap.domain().end(); it != itend; ++it)
+    {
+      Point p = *it;
+      Voronoi3D::Value q = voronoimap( p );   // site le plus proche de p
+      if ( q != p )
+        {
+          double d = l2( q, p );
+          if ( d <= (double)R ) // on se limite à l'offset de taille R
+            { 
+              RealVector v( p[ 0 ] - q[ 0 ], p[ 1 ] - q[ 1 ],p[ 2 ] - q[ 2 ] );
+              // calcul le produit tensoriel V^t x V
+              for ( Dimension i = 0; i < 3; ++i ) 
+                for ( Dimension j = 0; j < 3; ++j )
+                  m.setComponent( i, j, v[ i ] * v[ j ] ); 
+              pt2vcm[ q ] += m;
+            }
+        }
+    }
+  // On diagonalise le VCM. ATTENTION il faudrait aussi utiliser le petit r !
+  for ( std::vector<Point>::const_iterator it = vectPoints.begin(), itE = vectPoints.end();
+        it != itE; ++it )
+    {
+      Matrix3 & vcm = pt2vcm[ *it ];
+      // a diagonaliser ...
+    }
+  trace.endBlock();
+
+  
   // On affiche le vecteur vers le site le plus proche seulement si il est à distance <= 4.
   for(Voronoi3D::Domain::ConstIterator it = voronoimap.domain().begin(),
       itend = voronoimap.domain().end(); it != itend; ++it)
   {
     Point p = *it;
-    Voronoi3D::Value q = voronoimap( p );   //closest site to (*it)
+    Voronoi3D::Value q = voronoimap( p );   // site le plus proche de p
     if ( q != p )
       {
         double d = l2( q, p );
