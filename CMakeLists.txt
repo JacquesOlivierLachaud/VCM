@@ -59,6 +59,7 @@ SET(VCM_SRC
   )
 # Add source files needing QGLViewer here.
 SET(VCM_QGL_SRC
+  dvcm-3d
   )
 
 FOREACH(FILE ${VCM_SRC})
@@ -71,7 +72,7 @@ FOREACH(FILE ${VCM_SRC})
 ENDFOREACH(FILE)
 
 
-if (  WITH_VISU3D_QGLVIEWER )
+if ( WITH_VISU3D_QGLVIEWER )
   FOREACH(FILE ${VCM_QGL_SRC}) 
     add_executable(${FILE} ${FILE})
     target_link_libraries ( ${FILE} ${DGTAL_LIBRARIES} ${VCMLibDependencies})   

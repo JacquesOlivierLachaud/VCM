@@ -15,13 +15,13 @@
  **/
 
 /**
- * @file dvcm-2d.cpp
+ * @file dvcm-3d.cpp
  * @author Jacques-Olivier Lachaud (\c jacques-olivier.lachaud@univ-savoie.fr )
  * Laboratory of Mathematics (CNRS, UMR 5127), University of Savoie, France
  *
- * @date 2014/01/31
+ * @date 2014/05/02
  *
- * Computes the 2d voronoi map of a list of digital points.
+ * Computes the 3d voronoi map of a list of digital points.
  *
  * This file is part of the DGtal library.
  */
@@ -31,6 +31,7 @@
 #include <boost/program_options/options_description.hpp>
 #include <boost/program_options/parsers.hpp>
 #include <boost/program_options/variables_map.hpp>
+#include <QtGui/qapplication.h>
 
 #include "DGtal/base/Common.h"
 #include "DGtal/helpers/StdDefs.h"
@@ -42,26 +43,28 @@
 #include "DGtal/geometry/volumes/distance/ExactPredicateLpSeparableMetric.h"
 #include "DGtal/geometry/volumes/distance/VoronoiMap.h"
 #include "DGtal/geometry/volumes/distance/DistanceTransformation.h"
+#include "DGtal/io/viewers/Viewer3D.h"
 
-#include "DGtal/io/colormaps/HueShadeColorMap.h"
-#include "DGtal/io/boards/Board2D.h"
+//#include "DGtal/io/colormaps/HueShadeColorMap.h"
+//#include "DGtal/io/boards/Board2D.h"
 //! [Voro2D-header]
 
 ///////////////////////////////////////////////////////////////////////////////
 
 using namespace std;
 
-typedef DGtal::Z2i::Space Space;
-typedef DGtal::Z2i::Vector Vector;
-typedef DGtal::Z2i::Point Point;
+typedef DGtal::Z3i::Space Space;
+typedef DGtal::Z3i::Vector Vector;
+typedef DGtal::Z3i::Point Point;
+typedef DGtal::Z3i::RealPoint RealPoint;
 typedef DGtal::HyperRectDomain<Space> Domain;
 typedef DGtal::ImageContainerBySTLVector<Domain,bool> CharacteristicSet;
-typedef DGtal::ExactPredicateLpSeparableMetric<Space, 2> Metric; // L2-metric
+typedef DGtal::ExactPredicateLpSeparableMetric<Space, 3> Metric; // L2-metric
 
 // Model of CPointPredicate
 struct CharacteristicSetPredicate {
   typedef CharacteristicSetPredicate Self;
-  typedef DGtal::Z2i::Point Point;
+  typedef DGtal::Z3i::Point Point;
   CharacteristicSetPredicate() : ptrSet( 0 ) {}
   CharacteristicSetPredicate( const CharacteristicSet& aSet) : ptrSet( &aSet ) {}
   CharacteristicSetPredicate( const Self& other ) : ptrSet( other.ptrSet ) {}
@@ -80,13 +83,14 @@ using namespace DGtal;
 ///////////////////////////////////////////////////////////////////////////////
 int main( int argc, char** argv )
 {
+  QApplication application(argc,argv);
 
   // parse command line ----------------------------------------------
   namespace po = boost::program_options;
   po::options_description general_opt("Allowed options are: ");
   general_opt.add_options()
     ("help,h", "display this message")
-    ("input,i", po::value<std::string>(), "name of the file containing 2d discrete points (.sdp) " )
+    ("input,i", po::value<std::string>(), "name of the file containing 3d discrete points (.sdp) " )
     ("big-radius,R", po::value<int>()->default_value( 4 ), "the parameter R in the VCM." )
     ;  
   bool parseOK=true;
@@ -104,7 +108,7 @@ int main( int argc, char** argv )
 		<< "Reads a set of points and computes a Voronoi map."
 		<< general_opt << "\n";
       std::cout << "Example:\n"
-		<< "dvcm-2d -i ellipse.sdp \n";
+		<< "dvcm-3d -i ellipse.sdp \n";
       return 0;
     }
   if(! vm.count("input"))
@@ -119,8 +123,9 @@ int main( int argc, char** argv )
   vector<unsigned int> vPos;
   vPos.push_back(0);
   vPos.push_back(1);
+  vPos.push_back(2);
   std::string inputSDP = vm["input"].as<std::string>();
-  trace.info() << "Reading input 2d discrete points file: " << inputSDP; 
+  trace.info() << "Reading input 3d discrete points file: " << inputSDP; 
   std::vector<Point> vectPoints=  PointListReader<Point>::getPointsFromFile(inputSDP, vPos); 
   trace.info() << " [done] " << std::endl ; 
 
@@ -144,41 +149,44 @@ int main( int argc, char** argv )
     charSet.setValue( *it, true );
 
   // Display input set.
-  Board2D board;
-  for ( Domain::ConstIterator it = domain.begin(), itE = domain.end();
+  Viewer3D<> viewer;
+  viewer.setWindowTitle("Voronoi 3D viewer");
+  viewer.show();
+
+  for ( std::vector<Point>::const_iterator it = vectPoints.begin(), itE = vectPoints.end();
         it != itE; ++it )
-    if ( charSet( *it ) ) board << *it;
+    viewer << *it;
 
   // Le diagramme de Voronoi est calculé sur le complément de X.
   CharacteristicSetPredicate inCharSet( charSet );
   typedef NotPointPredicate<CharacteristicSetPredicate> NotPredicate;
   NotPredicate notSetPred( inCharSet);
 
-  trace.beginBlock ( "Calcul du diagramme de Voronoi 2D" );
-  typedef VoronoiMap<Z2i::Space, NotPredicate, Metric > Voronoi2D;
+  trace.beginBlock ( "Calcul du diagramme de Voronoi 3D" );
+  typedef VoronoiMap<Z3i::Space, NotPredicate, Metric > Voronoi3D;
   Metric l2;
-  Voronoi2D voronoimap(domain,notSetPred,l2);
+  Voronoi3D voronoimap(domain,notSetPred,l2);
   trace.endBlock();
 
   // On affiche le vecteur vers le site le plus proche seulement si il est à distance <= 4.
-  // board.clear();
-  // board << domain;
-  for(Voronoi2D::Domain::ConstIterator it = voronoimap.domain().begin(),
+  for(Voronoi3D::Domain::ConstIterator it = voronoimap.domain().begin(),
       itend = voronoimap.domain().end(); it != itend; ++it)
   {
-    Voronoi2D::Value site = voronoimap( *it );   //closest site to (*it)
-    if (site != (*it))
+    Point p = *it;
+    Voronoi3D::Value q = voronoimap( p );   //closest site to (*it)
+    if ( q != p )
       {
-        double d = l2( site, *it );
-        if( d <= (double)R )
+        double d = l2( q, p );
+        if ( ( (double)(R-1) <= d ) && ( d <= (double)R ) ) // on affiche que la dernière couche.
         { 
-            Display2DFactory::draw( board,   site - (*it), (*it)); //Draw an arrow
+          viewer.addLine( RealPoint( p[ 0 ], p[ 1 ], p[ 2 ] ),
+                          RealPoint( q[ 0 ], q[ 1 ], q[ 2 ] ),
+                          0.03 ); // width
         }
       }
   }
-  board.saveSVG("voronoimap-voro-R.svg");
-
-  return 0;
+  viewer << Viewer3D<>::updateDisplay;
+  return application.exec();
 }
 //                                                                           //
 ///////////////////////////////////////////////////////////////////////////////
