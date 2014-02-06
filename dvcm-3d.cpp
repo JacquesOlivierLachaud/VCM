@@ -45,6 +45,7 @@
 #include "DGtal/geometry/volumes/distance/VoronoiMap.h"
 #include "DGtal/geometry/volumes/distance/DistanceTransformation.h"
 #include "DGtal/io/viewers/Viewer3D.h"
+#include "DGtal/math/EigenValues3D.h"
 
 //#include "DGtal/io/colormaps/HueShadeColorMap.h"
 //#include "DGtal/io/boards/Board2D.h"
@@ -62,7 +63,9 @@ typedef DGtal::Z3i::RealVector RealVector;
 typedef DGtal::HyperRectDomain<Space> Domain;
 typedef DGtal::ImageContainerBySTLVector<Domain,bool> CharacteristicSet;
 typedef DGtal::ExactPredicateLpSeparableMetric<Space, 3> Metric; // L2-metric
-typedef DGtal::SimpleMatrix<double,3,3> Matrix3;
+typedef DGtal::EigenValues3D<double> LinearAlgebraTool;
+typedef LinearAlgebraTool::Matrix33 Matrix33;
+typedef LinearAlgebraTool::Vector3 Vector3;
 
 // Model of CPointPredicate
 struct CharacteristicSetPredicate {
@@ -81,7 +84,10 @@ private:
   const CharacteristicSet* ptrSet;
 };
 
-
+struct EigenVCM {
+  Vector3 values;   //< eigenvalues
+  Matrix33 vectors; //< eigenvectors
+};
 
 using namespace DGtal;
 
@@ -175,9 +181,9 @@ int main( int argc, char** argv )
 
   trace.beginBlock ( "Calcul du VCM" );
   // Calcul du VCM
-  typedef std::map<Point,Matrix3> PT2VCM;
-  PT2VCM pt2vcm;   // mapping point -> VCM
-  Matrix3 m; // zero matrix
+  typedef std::map<Point,Matrix33> Pt2VCM;
+  Pt2VCM pt2vcm;   // mapping point -> VCM
+  Matrix33 m; // zero matrix
   for ( std::vector<Point>::const_iterator it = vectPoints.begin(), itE = vectPoints.end();
         it != itE; ++it )
     pt2vcm[ *it ] = m;
@@ -201,33 +207,52 @@ int main( int argc, char** argv )
             }
         }
     }
+  trace.endBlock();
+
+  trace.beginBlock ( "Diagonalisation du VCM" );
   // On diagonalise le VCM. ATTENTION il faudrait aussi utiliser le petit r !
+  typedef std::map<Point,EigenVCM> Pt2EigenVCM;
+  Pt2EigenVCM pt2eigen_vcm;
   for ( std::vector<Point>::const_iterator it = vectPoints.begin(), itE = vectPoints.end();
         it != itE; ++it )
     {
-      Matrix3 & vcm = pt2vcm[ *it ];
-      // a diagonaliser ...
+      const Matrix33 & vcm = pt2vcm[ *it ];
+      EigenVCM & evcm = pt2eigen_vcm[ *it ];
+      LinearAlgebraTool::getEigenDecomposition( vcm, evcm.vectors, evcm.values );
     }
   trace.endBlock();
 
-  
+  trace.beginBlock ( "Affichage des normales" );
+  for ( std::vector<Point>::const_iterator it = vectPoints.begin(), itE = vectPoints.end();
+        it != itE; ++it )
+    {
+      Point p = *it;
+      const EigenVCM & evcm = pt2eigen_vcm[ p ];
+      RealPoint rp( p[ 0 ], p[ 1 ], p[ 2 ] );
+      Vector3 n = evcm.vectors.column( 0 ); // première colonne
+      n *= 3;
+      viewer.addLine( rp + n, rp - n, 0.1 );
+    }
+  trace.endBlock();
+
+
   // On affiche le vecteur vers le site le plus proche seulement si il est à distance <= 4.
-  for(Voronoi3D::Domain::ConstIterator it = voronoimap.domain().begin(),
-      itend = voronoimap.domain().end(); it != itend; ++it)
-  {
-    Point p = *it;
-    Voronoi3D::Value q = voronoimap( p );   // site le plus proche de p
-    if ( q != p )
-      {
-        double d = l2( q, p );
-        if ( ( (double)(R-1) <= d ) && ( d <= (double)R ) ) // on affiche que la dernière couche.
-        { 
-          viewer.addLine( RealPoint( p[ 0 ], p[ 1 ], p[ 2 ] ),
-                          RealPoint( q[ 0 ], q[ 1 ], q[ 2 ] ),
-                          0.03 ); // width
-        }
-      }
-  }
+  // for(Voronoi3D::Domain::ConstIterator it = voronoimap.domain().begin(),
+  //     itend = voronoimap.domain().end(); it != itend; ++it)
+  // {
+  //   Point p = *it;
+  //   Voronoi3D::Value q = voronoimap( p );   // site le plus proche de p
+  //   if ( q != p )
+  //     {
+  //       double d = l2( q, p );
+  //       if ( ( (double)(R-1) <= d ) && ( d <= (double)R ) ) // on affiche que la dernière couche.
+  //       { 
+  //         viewer.addLine( RealPoint( p[ 0 ], p[ 1 ], p[ 2 ] ),
+  //                         RealPoint( q[ 0 ], q[ 1 ], q[ 2 ] ),
+  //                         0.03 ); // width
+  //       }
+  //     }
+  // }
   viewer << Viewer3D<>::updateDisplay;
   return application.exec();
 }
