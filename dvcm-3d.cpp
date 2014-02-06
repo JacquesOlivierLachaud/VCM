@@ -70,6 +70,9 @@ typedef DGtal::ExactPredicateLpSeparableMetric<Space, 3> Metric; // L2-metric
 typedef DGtal::EigenValues3D<double> LinearAlgebraTool;
 typedef LinearAlgebraTool::Matrix33 Matrix33;
 typedef LinearAlgebraTool::Vector3 Vector3;
+typedef KSpace::Surfel Surfel;
+typedef KSpace::SCell SCell;
+
 
 // Model of CPointPredicate
 struct CharacteristicSetPredicate {
@@ -237,6 +240,7 @@ int main( int argc, char** argv )
     ("normal-dir,n", po::value<double>()->default_value( 2.0 ), "display the normal direction with the given size." )
     ("first-principal-dir,p", po::value<double>()->default_value( 0.0 ), "display the first principal direction with the given size." )
     ("second-principal-dir,q", po::value<double>()->default_value( 0.0 ), "display the second principal direction with the given size." )
+    ("export,e", po::value<std::string>(), "exports surfel normals which can be viewed with viewSetOfSurfels." )
     ;  
   bool parseOK=true;
   po::variables_map vm;
@@ -258,6 +262,8 @@ int main( int argc, char** argv )
 		<< "dvcm-3d -s ../helix-10.pts \n";
       return 0;
     }
+  KSpace ks;
+  std::vector<Surfel> surfels;   // Contains the surfels if data comes from volume.
   std::vector<Point> vectPoints; // Contains the set of discrete points.
   if ( vm.count("sdp") )
     {
@@ -285,10 +291,6 @@ int main( int argc, char** argv )
       ThresholdedImage thresholdedImage( image, thresholdMin, thresholdMax );
       trace.endBlock();
       trace.beginBlock( "Extracting boundary by scanning the space. " );
-      typedef KSpace::Surfel Surfel;
-      typedef KSpace::SCell SCell;
-      std::vector<Surfel> surfels;
-      KSpace ks;
       bool space_ok = ks.init( image.domain().lowerBound(),
                                image.domain().upperBound(), true );
       if (!space_ok)
@@ -316,9 +318,9 @@ int main( int argc, char** argv )
           pointSet.insert( ks.sCoords( ks.sIncident( l2, j, true ) ) );
           pointSet.insert( ks.sCoords( ks.sIncident( l2, j, false ) ) );
         }
-      surfels.clear();
       vectPoints.resize( pointSet.size() );
       std::copy( pointSet.begin(), pointSet.end(), vectPoints.begin() );
+      pointSet.clear();
       trace.endBlock();
     }
   else
@@ -491,7 +493,41 @@ int main( int argc, char** argv )
     }
   trace.endBlock();
 
-
+  if ( vm.count( "export" ) )
+    {
+      std::string filename = vm[ "export" ].as<std::string>();
+      std::ofstream output( filename.c_str() );
+      for ( std::vector<Surfel>::const_iterator it = surfels.begin(), itE = surfels.end(); it != itE; ++it )
+        {
+          Dimension k = ks.sOrthDir( *it );
+          Dimension i = (k+1)%3;
+          Dimension j = (i+1)%3;
+          SCell l1 = ks.sIncident( *it, i, true );
+          SCell l2 = ks.sIncident( *it, i, false );
+          Point p1 = ks.sCoords( ks.sIncident( l1, j, true ) );
+          Point p2 = ks.sCoords( ks.sIncident( l1, j, false ) );
+          Point p3 = ks.sCoords( ks.sIncident( l2, j, true ) );
+          Point p4 = ks.sCoords( ks.sIncident( l2, j, false ) );
+          Vector3 n = pt2eigen_vcm[ p1 ].vectors.column( 2 )
+            + pt2eigen_vcm[ p2 ].vectors.column( 2 )
+            + pt2eigen_vcm[ p3 ].vectors.column( 2 )
+            + pt2eigen_vcm[ p4 ].vectors.column( 2 );
+          n /= 4.0;
+          bool orth = ks.sDirect( *it, k );
+          Point out = ks.sCoords( ks.sIndirectIncident( *it, k ) );
+          Point in = ks.sCoords( ks.sDirectIncident( *it, k ) );
+          Vector trivial = out - in;
+          Vector3 t( trivial[ 0 ], trivial[ 1 ], trivial[ 2 ] );
+          if ( n.dot( t ) > 0 ) n = -n;
+          output << "CellN " << ks.sKCoord( *it, 0 ) 
+                 << " " << ks.sKCoord( *it, 1 )
+                 << " " << ks.sKCoord( *it, 2 )
+                 << " " << ks.sSign( *it )
+                 << " 0.5 0.5 1.0" 
+                 << " " << n[ 0 ] << " " << n[ 1 ] << " " << n[ 2 ] << std::endl;
+        }
+      output.close();
+    }
   // On affiche le vecteur vers le site le plus proche seulement si il est à distance <= 4.
   // for(Voronoi3D::Domain::ConstIterator it = voronoimap.domain().begin(),
   //     itend = voronoimap.domain().end(); it != itend; ++it)
