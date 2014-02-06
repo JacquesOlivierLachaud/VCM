@@ -111,16 +111,19 @@ struct RegularSubdivision {
     dimensions /= mySize;
     myReducedDomain = Domain( Point::zero, dimensions );
     myArray = StorageArray( myReducedDomain );
-    for ( typename Domain::ConstIterator it = myReducedDomain.begin(), itE = myReducedDomain.end();
-          it != itE; ++it )
-      myArray.setValue( *it, new Storage );
+    // for ( typename Domain::ConstIterator it = myReducedDomain.begin(), itE = myReducedDomain.end();
+    //       it != itE; ++it )
+    //   myArray.setValue( *it, 0 );
   }
 
   ~RegularSubdivision()
   {
     for ( typename Domain::ConstIterator it = myReducedDomain.begin(), itE = myReducedDomain.end();
           it != itE; ++it )
-      delete myArray( *it );
+      {
+        Storage* ptr = myArray( *it );
+        if ( ptr ) delete ptr;
+      }
   }
 
   Point bucket( Point p ) const
@@ -144,7 +147,13 @@ struct RegularSubdivision {
 
   void store( Point p ) 
   {
-    Storage* pts = myArray( bucket( p ) );
+    Point b = bucket( p );
+    Storage* pts = myArray( b );
+    if ( pts == 0 ) 
+      {
+        pts = new Storage;
+        myArray.setValue( b, pts );
+      }
     pts->push_back( p );
   }
 
@@ -177,9 +186,10 @@ struct RegularSubdivision {
              || pred( Point( lo[ 0 ], hi[ 1 ], hi[ 2 ] ) )
              || pred( Point( hi[ 0 ], lo[ 1 ], hi[ 2 ] ) ) ) {
           // std::cout << "Predicate ok for bucket " << *it << std::endl;
-          const Storage & storage = *( myArray( *it ) );
-          for ( typename Storage::const_iterator its = storage.begin(), itsE = storage.end(); its != itsE; ++its )
-            pts.push_back( *its );
+          const Storage* storage = myArray( *it );
+          if ( storage )
+            for ( typename Storage::const_iterator its = storage->begin(), itsE = storage->end(); its != itsE; ++its )
+              pts.push_back( *its );
         }
       }
   }
