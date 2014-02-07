@@ -94,6 +94,12 @@ private:
 struct EigenVCM {
   Vector3 values;   //< eigenvalues
   Matrix33 vectors; //< eigenvectors
+  unsigned char sigma[ 3 ];   //< permutation
+  EigenVCM() {
+    sigma[ 0 ] = 0;
+    sigma[ 1 ] = 1;
+    sigma[ 2 ] = 2;
+  }
 };
 
 using namespace DGtal;
@@ -192,7 +198,7 @@ struct RegularSubdivision {
           const Storage* storage = myArray( *it );
           if ( storage )
             for ( typename Storage::const_iterator its = storage->begin(), itsE = storage->end(); its != itsE; ++its )
-              pts.push_back( *its );
+              if ( pred( *its ) ) pts.push_back( *its );
         }
       }
   }
@@ -203,22 +209,40 @@ struct RegularSubdivision {
   StorageArray myArray;
 };
 
-template <typename Metric, typename Point>
+template <typename Point>
 struct PointInBallPredicate {
-  Metric metric;
-  Point center;
-  double radius;
-  PointInBallPredicate( Clone<Metric> aMetric, Point aCenter, double aRadius )
-    : metric( aMetric ), center( aCenter ), radius( aRadius )
+  const Point center;
+  const double radius2;
+  PointInBallPredicate( Point aCenter, double aRadius )
+    : center( aCenter ), radius2( sqr( aRadius ) )
   {}
-  
+
+  static inline double sqr( double x ) { return x*x; }
   bool operator()( const Point & p ) const
   {
-    double d = metric( center, p );
-    return d <= radius;
+    double d = sqr( center[ 0 ] - p[ 0 ] )
+      + sqr( center[ 1 ] - p[ 1 ] )
+      + sqr( center[ 2 ] - p[ 2 ] );
+    return d <= radius2;
   }
   
 };
+// template <typename Metric, typename Point>
+// struct PointInBallPredicate {
+//   Metric metric;
+//   Point center;
+//   double radius;
+//   PointInBallPredicate( Clone<Metric> aMetric, Point aCenter, double aRadius )
+//     : metric( aMetric ), center( aCenter ), radius( aRadius )
+//   {}
+  
+//   bool operator()( const Point & p ) const
+//   {
+//     double d = metric( center, p );
+//     return d <= radius;
+//   }
+  
+// };
 
 ///////////////////////////////////////////////////////////////////////////////
 int main( int argc, char** argv )
@@ -420,7 +444,8 @@ int main( int argc, char** argv )
   trace.endBlock();
 
   trace.beginBlock ( "Intégration de VCM_r" );
-  typedef PointInBallPredicate<Metric,Point> BallPredicate;
+  // typedef PointInBallPredicate<Metric,Point> BallPredicate;
+  typedef PointInBallPredicate<Point> BallPredicate;
   typedef std::map<Point,EigenVCM> Pt2EigenVCM;
   Pt2EigenVCM pt2eigen_vcm;
   std::vector<Point> neighbors;
@@ -431,7 +456,7 @@ int main( int argc, char** argv )
     {
       trace.progressBar(++i,pts_size);
       Point p = *it;
-      BallPredicate pred( l2, p, r );
+      BallPredicate pred( p, r ); // ( l2, p, r )
       Point bucket = subdivision.bucket( p ); 
       subdivision.getPoints( neighbors, 
                              bucket - Point::diagonal(1),
@@ -448,7 +473,7 @@ int main( int argc, char** argv )
           // Ne marche pas bien. Je ne sais pas pourquoi. Sans doute
           // que ce n'est pas la distance au germe, mais la distance
           // aux points de la cellule de Voronoi.
-          // vcm_q *= coef;
+          vcm_q *= coef;
           vcm += vcm_q;
         }
 
@@ -459,6 +484,49 @@ int main( int argc, char** argv )
       neighbors.clear();
     }
   trace.endBlock();
+
+  // trace.beginBlock ( "Relaxation des vecteurs propres" );
+  // i = 0;
+  // for ( std::vector<Point>::const_iterator it = vectPoints.begin(), itE = vectPoints.end();
+  //       it != itE; ++it )
+  //   {
+  //     trace.progressBar(++i,pts_size);
+  //     Point p = *it;
+  //     BallPredicate pred( p, 2 ); // look at neighborhood  // ( l2, p, r )
+  //     Point bucket = subdivision.bucket( p ); 
+  //     subdivision.getPoints( neighbors, 
+  //                            bucket - Point::diagonal(1),
+  //                            bucket + Point::diagonal(1),
+  //                            pred );
+  //     EigenVCM & evcm = pt2eigen_vcm[ p ];
+  //     Matrix33 alignment;
+  //     for ( std::vector<Point>::const_iterator it_neighbors = neighbors.begin(),
+  //             it_neighbors_end = neighbors.end(); it_neighbors != it_neighbors_end; ++it_neighbors )
+  //       {
+  //         Point q = *it_neighbors;
+  //         const EigenVCM & evcm_neighbor = pt2eigen_vcm[ q ];
+  //         for ( int j = 0; j < 3; ++j )
+  //           for ( int k = 0; k < 3; ++k )
+  //             {
+  //               double val = alignment( j, k );
+  //               alignment.setComponent( j, k, 
+  //                                       val + abs( evcm.vectors.column( j ).dot( evcm_neighbor.vectors.column( k ) ) ) );
+  //             }
+  //       }
+  //     neighbors.clear();
+  //     for ( int j = 0; j < 3; ++j )
+  //       {
+  //         int best = 0;
+  //         for ( int k = 1; k < 3; ++k )
+  //           if ( alignment( j, k ) > alignment( j, best ) )
+  //             best = k;
+  //         evcm.sigma[ j ] = best;
+  //         if ( ( j == 2 ) && ( j != best ) )
+  //           std::cout << "Point " << p << " is relaxed: " << j << " -> " << best << std::endl;
+  //       }
+  //   }
+   
+  // trace.endBlock();
 
   trace.beginBlock ( "Affichage des normales" );
   double size_n = vm[ "normal-dir" ].as<double>();
@@ -472,19 +540,19 @@ int main( int argc, char** argv )
       RealPoint rp( p[ 0 ], p[ 1 ], p[ 2 ] );
       // last eigenvalue is the greatest.
       if ( size_n != 0.0 ) {
-        Vector3 n = evcm.vectors.column( 2 ); // troisième colonne
+        Vector3 n = evcm.vectors.column( evcm.sigma[ 2 ] ); // troisième colonne
         n *= size_n;
         viewer.setLineColor( Color::Black );
         viewer.addLine( rp + n, rp - n, 0.1 );
       }
       if ( size_p1 != 0.0 ) {
-        Vector3 n = evcm.vectors.column( 1 ); // deuxième colonne
+        Vector3 n = evcm.vectors.column( evcm.sigma[ 1 ] ); // deuxième colonne
         n *= size_p1;
         viewer.setLineColor( Color::Blue );
         viewer.addLine( rp + n, rp - n, 0.1 );
       }
       if ( size_p2 != 0.0 ) {
-        Vector3 n = evcm.vectors.column( 0 ); // première colonne
+        Vector3 n = evcm.vectors.column( evcm.sigma[ 0 ] ); // première colonne
         n *= size_p2;
         viewer.setLineColor( Color::Red );
         viewer.addLine( rp + n, rp - n, 0.1 );
@@ -497,34 +565,47 @@ int main( int argc, char** argv )
     {
       std::string filename = vm[ "export" ].as<std::string>();
       std::ofstream output( filename.c_str() );
+      std::set<Surfel> surfelSet;
       for ( std::vector<Surfel>::const_iterator it = surfels.begin(), itE = surfels.end(); it != itE; ++it )
+        surfelSet.insert( *it );
+      for ( std::set<Surfel>::const_iterator it = surfelSet.begin(), itE = surfelSet.end(); it != itE; ++it )
         {
           Dimension k = ks.sOrthDir( *it );
           Dimension i = (k+1)%3;
           Dimension j = (i+1)%3;
+          bool dir =  ks.sDirect( *it, k );
+          Point out = ks.sCoords( ks.sIncident( *it, k, ! dir ) );
+          Point in = ks.sCoords( ks.sIncident( *it, k, dir ) );
+          Vector trivial = out - in;
+          Vector3 t( trivial[ 0 ], trivial[ 1 ], trivial[ 2 ] );
+          //std::cout << trivial[ 0 ] << " " << trivial[ 1 ] << " " << trivial[ 2 ] << std::endl;
           SCell l1 = ks.sIncident( *it, i, true );
           SCell l2 = ks.sIncident( *it, i, false );
           Point p1 = ks.sCoords( ks.sIncident( l1, j, true ) );
           Point p2 = ks.sCoords( ks.sIncident( l1, j, false ) );
           Point p3 = ks.sCoords( ks.sIncident( l2, j, true ) );
           Point p4 = ks.sCoords( ks.sIncident( l2, j, false ) );
-          Vector3 n = pt2eigen_vcm[ p1 ].vectors.column( 2 )
-            + pt2eigen_vcm[ p2 ].vectors.column( 2 )
-            + pt2eigen_vcm[ p3 ].vectors.column( 2 )
-            + pt2eigen_vcm[ p4 ].vectors.column( 2 );
-          n /= 4.0;
-          bool orth = ks.sDirect( *it, k );
-          Point out = ks.sCoords( ks.sIndirectIncident( *it, k ) );
-          Point in = ks.sCoords( ks.sDirectIncident( *it, k ) );
-          Vector trivial = out - in;
-          Vector3 t( trivial[ 0 ], trivial[ 1 ], trivial[ 2 ] );
-          if ( n.dot( t ) > 0 ) n = -n;
+          const EigenVCM & evcm1 = pt2eigen_vcm[ p1 ];
+          const EigenVCM & evcm2 = pt2eigen_vcm[ p2 ];
+          const EigenVCM & evcm3 = pt2eigen_vcm[ p3 ];
+          const EigenVCM & evcm4 = pt2eigen_vcm[ p4 ];
+          Vector3 n1 = evcm1.vectors.column( evcm1.sigma[ 2 ] );
+          if ( n1.dot( t ) > 0 ) n1 = -n1;
+          Vector3 n2 = evcm2.vectors.column( evcm2.sigma[ 2 ] );
+          if ( n2.dot( t ) > 0 ) n2 = -n2;
+          Vector3 n3 = evcm3.vectors.column( evcm3.sigma[ 2 ] );
+          if ( n3.dot( t ) > 0 ) n3 = -n3;
+          Vector3 n4 = evcm4.vectors.column( evcm4.sigma[ 2 ] );
+          if ( n4.dot( t ) > 0 ) n4 = -n4;
+          n1 += n2; n1 += n3; n1 += n4;
+          n1 /= 4.0;
+          if ( n1.dot( t ) > 0 ) n1 = -n1;
           output << "CellN " << ks.sKCoord( *it, 0 ) 
                  << " " << ks.sKCoord( *it, 1 )
                  << " " << ks.sKCoord( *it, 2 )
                  << " " << ks.sSign( *it )
                  << " 0.5 0.5 1.0" 
-                 << " " << n[ 0 ] << " " << n[ 1 ] << " " << n[ 2 ] << std::endl;
+                 << " " << n1[ 0 ] << " " << n1[ 1 ] << " " << n1[ 2 ] << std::endl;
         }
       output.close();
     }
