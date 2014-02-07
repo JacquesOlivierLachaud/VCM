@@ -244,6 +244,22 @@ struct PointInBallPredicate {
   
 // };
 
+template <typename OutputPointIterator>
+void getPointsFromSurfel( OutputPointIterator outIt,
+                          const KSpace & ks,
+                          Surfel cell )
+{
+  Dimension k = ks.sOrthDir( cell );
+  Dimension i = (k+1)%3;
+  Dimension j = (i+1)%3;
+  SCell l1 = ks.sIncident( cell, i, true );
+  SCell l2 = ks.sIncident( cell, i, false );
+  *outIt++ = ks.sCoords( ks.sIncident( l1, j, true ) );
+  *outIt++ = ks.sCoords( ks.sIncident( l1, j, false ) );
+  *outIt++ = ks.sCoords( ks.sIncident( l2, j, true ) );
+  *outIt++ = ks.sCoords( ks.sIncident( l2, j, false ) );
+}
+
 ///////////////////////////////////////////////////////////////////////////////
 int main( int argc, char** argv )
 {
@@ -332,15 +348,16 @@ int main( int argc, char** argv )
       std::set<Point> pointSet;
       for ( std::vector<Surfel>::const_iterator it = surfels.begin(), itE = surfels.end(); it != itE; ++it )
         {
-          Dimension k = ks.sOrthDir( *it );
-          Dimension i = (k+1)%3;
-          Dimension j = (i+1)%3;
-          SCell l1 = ks.sIncident( *it, i, true );
-          SCell l2 = ks.sIncident( *it, i, false );
-          pointSet.insert( ks.sCoords( ks.sIncident( l1, j, true ) ) );
-          pointSet.insert( ks.sCoords( ks.sIncident( l1, j, false ) ) );
-          pointSet.insert( ks.sCoords( ks.sIncident( l2, j, true ) ) );
-          pointSet.insert( ks.sCoords( ks.sIncident( l2, j, false ) ) );
+          getPointsFromSurfel( std::inserter( pointSet, pointSet.begin() ), ks, *it );
+          // Dimension k = ks.sOrthDir( *it );
+          // Dimension i = (k+1)%3;
+          // Dimension j = (i+1)%3;
+          // SCell l1 = ks.sIncident( *it, i, true );
+          // SCell l2 = ks.sIncident( *it, i, false );
+          // pointSet.insert( ks.sCoords( ks.sIncident( l1, j, true ) ) );
+          // pointSet.insert( ks.sCoords( ks.sIncident( l1, j, false ) ) );
+          // pointSet.insert( ks.sCoords( ks.sIncident( l2, j, true ) ) );
+          // pointSet.insert( ks.sCoords( ks.sIncident( l2, j, false ) ) );
         }
       vectPoints.resize( pointSet.size() );
       std::copy( pointSet.begin(), pointSet.end(), vectPoints.begin() );
@@ -485,6 +502,60 @@ int main( int argc, char** argv )
     }
   trace.endBlock();
 
+  trace.beginBlock ( "Calcul de l'application point -> surfels" );
+  std::map< Point, std::set<Surfel > > pt2surfels;
+  int surfels_size = surfels.size();
+  for ( std::vector<Surfel>::const_iterator it = surfels.begin(), itE = surfels.end(); it != itE; ++it )
+    {
+      std::vector<Point> pts;
+      Surfel surfel = *it;
+      getPointsFromSurfel( std::back_inserter( pts ), ks, surfel );
+      for ( int i = 0; i < 4; ++i )
+        pt2surfels[ pts[ i ] ].insert( surfel );
+    }
+  trace.endBlock();
+
+  trace.beginBlock ( "Calcul de l'orientation moyenne des surfels" );
+  std::map< Surfel, Vector3 > trivial_normal;
+  i = 0; 
+  for ( std::vector<Surfel>::const_iterator it = surfels.begin(), itE = surfels.end(); it != itE; ++it )
+    {
+      trace.progressBar( ++i, surfels_size );
+      std::vector<Point> pts;
+      std::set<Surfel> neighbor_surfels;
+      Surfel surfel = *it;
+      getPointsFromSurfel( std::back_inserter( pts ), ks, surfel );
+      Point p = pts[ 0 ];
+      BallPredicate pred( p, r ); // ( l2, p, r )
+      Point bucket = subdivision.bucket( p ); 
+      subdivision.getPoints( neighbors, 
+                             bucket - Point::diagonal(1),
+                             bucket + Point::diagonal(1),
+                             pred );
+      Vector3 & n = trivial_normal[ surfel ];
+      
+      for ( std::vector<Point>::const_iterator it_neighbors = neighbors.begin(),
+              it_neighbors_end = neighbors.end(); it_neighbors != it_neighbors_end; ++it_neighbors )
+        {
+          Point q = *it_neighbors;
+          const std::set<Surfel> & pt_surfels = pt2surfels[ q ];
+          neighbor_surfels.insert( pt_surfels.begin(), pt_surfels.end() );
+        }
+      neighbors.clear();
+      for ( std::set<Surfel>::const_iterator it_surf_n = neighbor_surfels.begin(), 
+              it_surf_end = neighbor_surfels.end(); it_surf_n != it_surf_end; ++it_surf_n )
+        {
+          Surfel neigh_surfel = *it_surf_n;
+          Dimension k = ks.sOrthDir( neigh_surfel );
+          bool dir =  ks.sDirect( neigh_surfel, k );
+          Point out = ks.sCoords( ks.sIncident( neigh_surfel, k, ! dir ) );
+          Point in = ks.sCoords( ks.sIncident( neigh_surfel, k, dir ) );
+          Vector trivial = out - in;
+          n += Vector3( trivial[ 0 ], trivial[ 1 ], trivial[ 2 ] );
+        }
+    }
+  trace.endBlock();
+
   // trace.beginBlock ( "Relaxation des vecteurs propres" );
   // i = 0;
   // for ( std::vector<Point>::const_iterator it = vectPoints.begin(), itE = vectPoints.end();
@@ -573,12 +644,11 @@ int main( int argc, char** argv )
           Dimension k = ks.sOrthDir( *it );
           Dimension i = (k+1)%3;
           Dimension j = (i+1)%3;
-          bool dir =  ks.sDirect( *it, k );
-          Point out = ks.sCoords( ks.sIncident( *it, k, ! dir ) );
-          Point in = ks.sCoords( ks.sIncident( *it, k, dir ) );
-          Vector trivial = out - in;
-          Vector3 t( trivial[ 0 ], trivial[ 1 ], trivial[ 2 ] );
-          //std::cout << trivial[ 0 ] << " " << trivial[ 1 ] << " " << trivial[ 2 ] << std::endl;
+          // bool dir =  ks.sDirect( *it, k );
+          // Point out = ks.sCoords( ks.sIncident( *it, k, ! dir ) );
+          // Point in = ks.sCoords( ks.sIncident( *it, k, dir ) );
+          // Vector trivial = out - in;
+          // Vector3 t( trivial[ 0 ], trivial[ 1 ], trivial[ 2 ] );
           SCell l1 = ks.sIncident( *it, i, true );
           SCell l2 = ks.sIncident( *it, i, false );
           Point p1 = ks.sCoords( ks.sIncident( l1, j, true ) );
@@ -589,6 +659,7 @@ int main( int argc, char** argv )
           const EigenVCM & evcm2 = pt2eigen_vcm[ p2 ];
           const EigenVCM & evcm3 = pt2eigen_vcm[ p3 ];
           const EigenVCM & evcm4 = pt2eigen_vcm[ p4 ];
+          const Vector3 & t = trivial_normal[ *it ];
           Vector3 n1 = evcm1.vectors.column( evcm1.sigma[ 2 ] );
           if ( n1.dot( t ) > 0 ) n1 = -n1;
           Vector3 n2 = evcm2.vectors.column( evcm2.sigma[ 2 ] );
@@ -599,7 +670,7 @@ int main( int argc, char** argv )
           if ( n4.dot( t ) > 0 ) n4 = -n4;
           n1 += n2; n1 += n3; n1 += n4;
           n1 /= 4.0;
-          if ( n1.dot( t ) > 0 ) n1 = -n1;
+          //if ( n1.dot( t ) > 0 ) n1 = -n1;
           output << "CellN " << ks.sKCoord( *it, 0 ) 
                  << " " << ks.sKCoord( *it, 1 )
                  << " " << ks.sKCoord( *it, 2 )
