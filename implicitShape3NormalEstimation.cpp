@@ -111,6 +111,7 @@ int main( int argc, char** argv )
     ("maxAABB,A",  po::value<double>()->default_value( 10.0 ), "the max value of the AABB bounding box (domain)" )
     ("R-radius,R", po::value<double>()->default_value( 5 ), "the parameter R in the VCM." )
     ("r-radius,r", po::value<double>()->default_value( 3 ), "the parameter r in the VCM." )
+    ("alpha", po::value<double>()->default_value( 0.25 ), "the parameter alpha in r(h)=r h^alpha in the VCM." )
     ("trivial-radius,t", po::value<double>()->default_value( 3 ), "the parameter r for the trivial normal estimator." )
     ("embedding,E", po::value<int>()->default_value( 0 ), "the surfel -> point embedding: 0: Pointels, 1: InnerSpel, 2: OuterSpel." )
     ("export,x", po::value<std::string>(), "exports surfel normals which can be viewed with viewSetOfSurfels." )
@@ -219,8 +220,9 @@ int main( int argc, char** argv )
       Scalar R = vm["R-radius"].as<double>();
       Scalar r = vm["r-radius"].as<double>();
       Scalar t = vm["trivial-radius"].as<double>();
-      R = R / pow( h, 0.75 );
-      r = r / pow( h, 0.75 );
+      Scalar alpha = vm["alpha"].as<double>();
+      R = R * pow( h, alpha-1.0 );
+      r = r * pow( h, alpha-1.0 );
       
       CountedPtr<VCMOnSurface> vcm_surface( new VCMOnSurface( ptrSurface, embType,
                                                               R, r, t, Metric(), true ) );
