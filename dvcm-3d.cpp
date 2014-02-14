@@ -288,10 +288,10 @@ void computeSurfaceVCM( std::ostream& output_vcm,
   typedef typename VCMOnSurface::Surfel2Normals::const_iterator S2NConstIterator;
 
   const KSpace & ks = surface.container().space();
-  typename VCMOnSurface::Surfel2PointEmbedding embType = 
-    embedding == 0 ? VCMOnSurface::Pointels :
-    embedding == 1 ? VCMOnSurface::InnerSpel :
-    VCMOnSurface::OuterSpel;
+  Surfel2PointEmbedding embType = 
+    embedding == 0 ? Pointels :
+    embedding == 1 ? InnerSpel :
+    OuterSpel;
   VCMOnSurface vcm_surface( surface, embType, R, r, trivial_r, Metric(), true );
 
   trace.beginBlock ( "Export des normales." );
