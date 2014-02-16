@@ -48,6 +48,76 @@
 #include "DGtal/shapes/implicit/ImplicitPolynomial3Shape.h"
 #include "DGtal/io/readers/MPolynomialReader.h"
 
+using namespace DGtal;
+
+template <typename SCell, typename RealVector>
+struct GradientMapAdapter {
+  typedef std::map<SCell,RealVector> SCell2RealVectorMap;
+  typedef SCell                                 Argument;
+  typedef RealVector                               Value;
+  GradientMapAdapter( ConstAlias<SCell2RealVectorMap> map )
+    : myMap( map ) {}
+  RealVector operator()( const Argument& arg ) const
+  {
+    typename SCell2RealVectorMap::const_iterator it = myMap->find( arg );
+    if ( it != myMap->end() ) return it->second;
+    else return RealVector();
+  }
+  CountedConstPtrOrConstPtr<SCell2RealVectorMap> myMap;
+};
+
+template <typename SCellEmbedder>
+struct SCellEmbedderWithNormal : public SCellEmbedder
+{
+  using SCellEmbedder::space;
+  using SCellEmbedder::operator();
+  typedef typename SCellEmbedder::KSpace          KSpace;
+  typedef typename SCellEmbedder::SCell            SCell;
+  typedef typename SCellEmbedder::RealPoint    RealPoint;
+  typedef SCell                                 Argument;
+  typedef RealPoint                                Value;
+  typedef typename KSpace::Space::RealVector  RealVector;
+  typedef std::map<SCell,RealVector> SCell2RealVectorMap;
+  typedef GradientMapAdapter<SCell,RealVector> GradientMap;
+
+  SCellEmbedderWithNormal( ConstAlias<SCellEmbedder> embedder, 
+                           ConstAlias<SCell2RealVectorMap> map )
+    : SCellEmbedder( embedder ), myMap( map )
+  {}
+  
+  GradientMap gradientMap() const
+  {
+    return GradientMap( myMap );
+  }
+
+  CountedConstPtrOrConstPtr<SCell2RealVectorMap> myMap;
+};
+
+template <typename DigitalSurface, 
+          typename Estimator>
+void exportNOFFSurface( const DigitalSurface& surface,
+                        const Estimator& estimator,
+                        std::ostream& output )
+{
+  typedef typename DigitalSurface::KSpace KSpace;
+  typedef typename DigitalSurface::ConstIterator ConstIterator;
+  typedef typename DigitalSurface::Surfel Surfel;
+  typedef typename KSpace::SCell SCell;
+  typedef typename Estimator::Quantity Quantity;
+  const KSpace& ks = surface.container().space();
+  std::map<Surfel,Quantity> normals;
+  for ( ConstIterator it = surface.begin(), itE = surface.end(); it != itE; ++it )
+    {
+      Quantity n_est = estimator.eval( it );
+      normals[ *it ] = n_est;
+    }
+  CanonicSCellEmbedder<KSpace> surfelEmbedder( ks );
+  typedef SCellEmbedderWithNormal< CanonicSCellEmbedder<KSpace> > Embedder;
+  Embedder embedder( surfelEmbedder, normals );
+  surface.exportAs3DNOFF( output, embedder );
+}
+
+
 template <typename DigitalSurface, 
           typename Estimator,
           typename CompEstimator>
@@ -115,6 +185,7 @@ int main( int argc, char** argv )
     ("trivial-radius,t", po::value<double>()->default_value( 3 ), "the parameter r for the trivial normal estimator." )
     ("embedding,E", po::value<int>()->default_value( 0 ), "the surfel -> point embedding: 0: Pointels, 1: InnerSpel, 2: OuterSpel." )
     ("export,x", po::value<std::string>(), "exports surfel normals which can be viewed with viewSetOfSurfels." )
+    ("noff,n", po::value<std::string>(), "exports the digital surface with normals as NOFF file <arg>" )
     ;  
   bool parseOK=true;
   po::variables_map vm;
@@ -195,11 +266,16 @@ int main( int argc, char** argv )
   std::ostringstream error_sstr;
   error_sstr << fname << "-" << nameEstimator << "-error-" << h << ".txt"; 
   std::ostringstream export_sstr;
+  std::ostringstream noff_sstr;
   bool toExport = vm.count( "export" );
   std::string str = toExport ? vm[ "export" ].as<std::string>() : "tmp";
   export_sstr << fname << "-" << nameEstimator << "-" << str << "-" << h << ".txt"; 
+  bool toNoff = vm.count( "noff" );
+  str = toNoff ? vm[ "noff" ].as<std::string>() : "tmp";
+  noff_sstr << fname << "-" << nameEstimator << "-" << str << "-" << h << ".off"; 
   std::ofstream error_output( error_sstr.str().c_str() );
   std::ofstream export_output( export_sstr.str().c_str() );
+  std::ofstream noff_output( noff_sstr.str().c_str() );
 
   trace.beginBlock( "Setting up estimators." );
   typedef ShapeGeometricFunctors::ShapeNormalVectorFunctor<ImplicitShape> NormalFunctor;
@@ -235,9 +311,14 @@ int main( int argc, char** argv )
       trace.endBlock();
       computeNormalEstimation( *ptrSurface, estimator, true_estimator,
                                error_output, export_output, toExport );
+      if ( vm.count( "noff" ) )
+        {
+          exportNOFFSurface( *ptrSurface, estimator, noff_output );
+        }
     }
   error_output.close();
   export_output.close();
+  noff_output.close();
   trace.endBlock();
   return 0;
 }
