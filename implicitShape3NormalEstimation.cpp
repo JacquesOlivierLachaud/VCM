@@ -181,6 +181,7 @@ int main( int argc, char** argv )
     ("maxAABB,A",  po::value<double>()->default_value( 10.0 ), "the max value of the AABB bounding box (domain)" )
     ("R-radius,R", po::value<double>()->default_value( 5 ), "the parameter R in the VCM." )
     ("r-radius,r", po::value<double>()->default_value( 3 ), "the parameter r in the VCM." )
+    ("kernel,k", po::value<std::string>()->default_value( "hat" ), "the function chi_r, either hat or ball." )
     ("alpha", po::value<double>()->default_value( 0.25 ), "the parameter alpha in r(h)=r h^alpha in the VCM." )
     ("trivial-radius,t", po::value<double>()->default_value( 3 ), "the parameter r for the trivial normal estimator." )
     ("embedding,E", po::value<int>()->default_value( 0 ), "the surfel -> point embedding: 0: Pointels, 1: InnerSpel, 2: OuterSpel." )
@@ -215,6 +216,7 @@ int main( int argc, char** argv )
   typedef Z3i::Space Space;
   typedef Z3i::KSpace KSpace;
   typedef double Scalar;
+  typedef KSpace::Point Point;
   typedef KSpace::Surfel Surfel;
   typedef Space::RealPoint RealPoint;
   typedef MPolynomial< 3, Scalar > Polynomial3;
@@ -286,10 +288,7 @@ int main( int argc, char** argv )
 
   if ( nameEstimator == "VCM" )
     {
-      trace.beginBlock("Computing VCM on surface." );
       typedef ExactPredicateLpSeparableMetric<Space,2> Metric;
-      typedef VoronoiCovarianceMeasureOnDigitalSurface<SurfaceContainer,Metric> VCMOnSurface;
-      typedef VCMDigitalSurfaceNormalEstimator<SurfaceContainer,Metric> VCMNormalEstimator;
       int embedding = vm["embedding"].as<int>();
       Surfel2PointEmbedding embType = embedding == 0 ? Pointels :
                                       embedding == 1 ? InnerSpel : OuterSpel;     
@@ -299,22 +298,60 @@ int main( int argc, char** argv )
       Scalar alpha = vm["alpha"].as<double>();
       R = R * pow( h, alpha-1.0 );
       r = r * pow( h, alpha-1.0 );
-      
-      CountedPtr<VCMOnSurface> vcm_surface( new VCMOnSurface( ptrSurface, embType,
-                                                              R, r, t, Metric(), true ) );
-      typedef VCMDigitalSurfaceNormalEstimator<SurfaceContainer,Metric> VCMNormalEstimator;
-      VCMNormalEstimator estimator( vcm_surface );
-      trace.info() << "# VCM estimation: h=" << h << " R=" << R << " r=" << r << std::endl;
-      error_output << "# VCM estimation: h=" << h << " R=" << R << " r=" << r << std::endl;
-      if ( toExport )
-        export_output << "# VCM estimation: h=" << h << " R=" << R << " r=" << r << std::endl;
-      trace.endBlock();
-      computeNormalEstimation( *ptrSurface, estimator, true_estimator,
-                               error_output, export_output, toExport );
-      if ( vm.count( "noff" ) )
-        {
+      std::string kernel = vm[ "kernel" ].as<std::string>();
+      if ( kernel == "hat" ) {
+        typedef HatPointFunction<Point,double> KernelFunction;
+        typedef VoronoiCovarianceMeasureOnDigitalSurface<SurfaceContainer,Metric,
+                                                         KernelFunction> VCMOnSurface;
+        typedef VCMDigitalSurfaceNormalEstimator<SurfaceContainer,Metric,
+                                                 KernelFunction> VCMNormalEstimator;
+        trace.beginBlock("Computing VCM on surface." );
+        KernelFunction chi_r( 1.0, r );
+        CountedPtr<VCMOnSurface> vcm_surface( new VCMOnSurface( ptrSurface, embType,
+                                                                R, r, chi_r,
+                                                                t, Metric(), true ) );
+        VCMNormalEstimator estimator( vcm_surface );
+        trace.info() << "# VCM estimation: h=" << h << " R=" << R 
+                     << " r=" << r << " hat" << std::endl;
+        error_output << "# VCM estimation: h=" << h << " R=" << R 
+                     << " r=" << r << " hat" << std::endl;
+        if ( toExport )
+          export_output << "# VCM estimation: h=" << h << " R=" << R 
+                        << " r=" << r << " hat" << std::endl;
+        trace.endBlock();
+        trace.beginBlock("Statistics and export." );
+        computeNormalEstimation( *ptrSurface, estimator, true_estimator,
+                                 error_output, export_output, toExport );
+        if ( vm.count( "noff" ) )
           exportNOFFSurface( *ptrSurface, estimator, noff_output );
-        }
+        trace.endBlock();
+      } else if ( kernel == "ball" ) {
+        typedef BallConstantPointFunction<Point,double> KernelFunction;
+        typedef VoronoiCovarianceMeasureOnDigitalSurface<SurfaceContainer,Metric,
+                                                         KernelFunction> VCMOnSurface;
+        typedef VCMDigitalSurfaceNormalEstimator<SurfaceContainer,Metric,
+                                                 KernelFunction> VCMNormalEstimator;
+        trace.beginBlock("Computing VCM on surface." );
+        KernelFunction chi_r( 1.0, r );
+        CountedPtr<VCMOnSurface> vcm_surface( new VCMOnSurface( ptrSurface, embType,
+                                                                R, r, chi_r,
+                                                                t, Metric(), true ) );
+        VCMNormalEstimator estimator( vcm_surface );
+        trace.info() << "# VCM estimation: h=" << h << " R=" << R 
+                     << " r=" << r << " ball" << std::endl;
+        error_output << "# VCM estimation: h=" << h << " R=" << R 
+                     << " r=" << r << " ball" << std::endl;
+        if ( toExport )
+          export_output << "# VCM estimation: h=" << h << " R=" << R 
+                        << " r=" << r << " ball" << std::endl;
+        trace.endBlock();
+        trace.beginBlock("Statistics and export." );
+        computeNormalEstimation( *ptrSurface, estimator, true_estimator,
+                                 error_output, export_output, toExport );
+        if ( vm.count( "noff" ) )
+          exportNOFFSurface( *ptrSurface, estimator, noff_output );
+        trace.endBlock();
+      }
     }
   error_output.close();
   export_output.close();

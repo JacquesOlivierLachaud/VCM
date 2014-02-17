@@ -330,8 +330,9 @@ void computeSurfaceVCM( std::ostream& output_vcm,
   typedef typename Space::RealPoint RealPoint;
   typedef typename Space::RealVector RealVector;
   typedef typename Surface::ConstIterator SurfelConstIterator;
-
-  typedef VoronoiCovarianceMeasureOnDigitalSurface<DigitalSurfaceContainer,Metric> VCMOnSurface;
+  typedef HatPointFunction<Point,double> KernelFunction;
+  typedef VoronoiCovarianceMeasureOnDigitalSurface< DigitalSurfaceContainer, Metric,
+                                                    KernelFunction > VCMOnSurface;
   typedef typename VCMOnSurface::VectorN VectorN;
   typedef typename VCMOnSurface::Surfel2Normals::const_iterator S2NConstIterator;
 
@@ -340,7 +341,8 @@ void computeSurfaceVCM( std::ostream& output_vcm,
     embedding == 0 ? Pointels :
     embedding == 1 ? InnerSpel :
     OuterSpel;
-  VCMOnSurface vcm_surface( surface, embType, R, r, trivial_r, Metric(), true );
+  KernelFunction chi( 1.0, r );
+  VCMOnSurface vcm_surface( surface, embType, R, r, chi, trivial_r, Metric(), true );
 
   trace.beginBlock ( "Export des normales." );
   std::map<Surfel,RealVector> surfel2normals;
