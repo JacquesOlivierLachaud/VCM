@@ -263,6 +263,54 @@ void getPointsFromSurfel( OutputPointIterator outIt,
   *outIt++ = ks.sCoords( ks.sIncident( l2, j, false ) );
 }
 
+
+using namespace DGtal;
+
+template <typename SCell, typename RealVector>
+struct GradientMapAdapter {
+  typedef std::map<SCell,RealVector> SCell2RealVectorMap;
+  typedef SCell                                 Argument;
+  typedef RealVector                               Value;
+  GradientMapAdapter( DGtal::ConstAlias<SCell2RealVectorMap> map )
+    : myMap( map ) {}
+  RealVector operator()( const Argument& arg ) const
+  {
+    typename SCell2RealVectorMap::const_iterator it = myMap->find( arg );
+    if ( it != myMap->end() ) return it->second;
+    else return RealVector();
+  }
+  DGtal::CountedConstPtrOrConstPtr<SCell2RealVectorMap> myMap;
+};
+
+template <typename SCellEmbedder>
+struct SCellEmbedderWithNormal : public SCellEmbedder
+{
+  using SCellEmbedder::space;
+  using SCellEmbedder::operator();
+  typedef typename SCellEmbedder::KSpace          KSpace;
+  typedef typename SCellEmbedder::SCell            SCell;
+  typedef typename SCellEmbedder::RealPoint    RealPoint;
+  typedef SCell                                 Argument;
+  typedef RealPoint                                Value;
+  typedef typename KSpace::Space::RealVector  RealVector;
+  typedef std::map<SCell,RealVector> SCell2RealVectorMap;
+  typedef GradientMapAdapter<SCell,RealVector> GradientMap;
+
+  SCellEmbedderWithNormal( DGtal::ConstAlias<SCellEmbedder> embedder, 
+                           DGtal::ConstAlias<SCell2RealVectorMap> map )
+    : SCellEmbedder( embedder ), myMap( map )
+  {}
+  
+  GradientMap gradientMap() const
+  {
+    return GradientMap( myMap );
+  }
+
+  DGtal::CountedConstPtrOrConstPtr<SCell2RealVectorMap> myMap;
+};
+
+
+
 template <typename Surface>
 void computeSurfaceVCM( std::ostream& output_vcm, 
                         std::ostream& output_trivial, 
@@ -295,6 +343,7 @@ void computeSurfaceVCM( std::ostream& output_vcm,
   VCMOnSurface vcm_surface( surface, embType, R, r, trivial_r, Metric(), true );
 
   trace.beginBlock ( "Export des normales." );
+  std::map<Surfel,RealVector> surfel2normals;
   for ( S2NConstIterator it = vcm_surface.surfelNormals().begin(), 
           itE = vcm_surface.surfelNormals().end(); it != itE; ++it )
     {
@@ -309,9 +358,18 @@ void computeSurfaceVCM( std::ostream& output_vcm,
         << "CellN " << ks.sKCoord( s, 0 ) << " " << ks.sKCoord( s, 1 ) << " " << ks.sKCoord( s, 2 )
         << " " << ks.sSign( s ) << " 0.5 0.5 1.0" 
         << " " << t[ 0 ] << " " << t[ 1 ] << " " << t[ 2 ] << std::endl;
+      surfel2normals[ s ] = n;
     }
   trace.endBlock();
 
+  trace.beginBlock ( "Export OFF surface." );
+  CanonicSCellEmbedder<KSpace> surfelEmbedder( ks );
+  typedef SCellEmbedderWithNormal< CanonicSCellEmbedder<KSpace> > Embedder;
+  Embedder embedder( surfelEmbedder, surfel2normals );
+  std::ofstream output_off( "surface.off" );
+  surface.exportAs3DNOFF( output_off, embedder );
+  output_off.close();
+  trace.endBlock();
 
 }
 
