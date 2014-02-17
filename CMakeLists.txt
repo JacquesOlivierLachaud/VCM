@@ -60,7 +60,9 @@ SET(VCM_SRC
 # Add source files needing QGLViewer here.
 SET(VCM_QGL_SRC
   dvcm-3d
+  dvcm-features-3d
   implicitShape3NormalEstimation
+  noisyImplicitShape3NormalEstimation
   )
 
 FOREACH(FILE ${VCM_SRC})
