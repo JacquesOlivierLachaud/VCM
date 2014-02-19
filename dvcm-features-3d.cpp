@@ -55,6 +55,7 @@
 #include "DGtal/geometry/surfaces/estimation/VoronoiCovarianceMeasureOnDigitalSurface.h"
 #include "DGtal/io/viewers/Viewer3D.h"
 #include "DGtal/io/readers/GenericReader.h"
+#include "DGtal/io/colormaps/GradientColorMap.h"
 
 
 ///////////////////////////////////////////////////////////////////////////////
@@ -311,11 +312,12 @@ struct SCellEmbedderWithNormal : public SCellEmbedder
 
 
 
-template <typename Viewer, typename Surface>
+template <typename Viewer, typename Surface, typename KernelFunction>
 void computeSurfaceVCMFeatures( Viewer& viewer,
                                 ostream & output_vcm,
                                 const Surface & surface, 
                                 double R, double r,
+                                KernelFunction chi,
                                 double trivial_r, int embedding,
                                 double T )
 {
@@ -331,7 +333,7 @@ void computeSurfaceVCMFeatures( Viewer& viewer,
   typedef typename Space::RealPoint RealPoint;
   typedef typename Space::RealVector RealVector;
   typedef typename Surface::ConstIterator SurfelConstIterator;
-  typedef HatPointFunction<Point,double> KernelFunction;
+  // typedef HatPointFunction<Point,double> KernelFunction;
   typedef VoronoiCovarianceMeasureOnDigitalSurface< DigitalSurfaceContainer, Metric,
                                                     KernelFunction > VCMOnSurface;
   typedef typename VCMOnSurface::VectorN VectorN;
@@ -342,11 +344,18 @@ void computeSurfaceVCMFeatures( Viewer& viewer,
     embedding == 0 ? Pointels :
     embedding == 1 ? InnerSpel :
     OuterSpel;
-  KernelFunction chi( 1.0, r );
+  // KernelFunction chi( 1.0, r );
   VCMOnSurface vcm_surface( surface, embType, R, r, chi, trivial_r, Metric(), true );
 
   trace.beginBlock ( "Export des normales." );
   double l1, l2, l3;
+  DGtal::GradientColorMap<double> grad( 0, T );
+  grad.addColor( DGtal::Color( 128, 128, 255 ) );
+  grad.addColor( DGtal::Color( 128, 128, 255 ) );
+  grad.addColor( DGtal::Color( 128, 128, 255 ) );
+  grad.addColor( DGtal::Color( 128, 255, 255 ) );
+  grad.addColor( DGtal::Color( 255, 255, 0 ) );
+  grad.addColor( DGtal::Color( 255, 0, 0 ) );
   for ( S2NConstIterator it = vcm_surface.surfelNormals().begin(), 
           itE = vcm_surface.surfelNormals().end(); it != itE; ++it )
     {
@@ -356,12 +365,19 @@ void computeSurfaceVCMFeatures( Viewer& viewer,
       vcm_surface.getEigenvalues( l1, l2, l3, s );
       double ratio = l2 / (l1+l2+l3); // some alpha^2/2
       //std::cout << " " << ratio;
-      bool sharp = ratio > T;
+      if ( ratio > T ) ratio = T;
+      Color c = grad( ratio );
+      // bool sharp = ratio > T;
       output_vcm 
         << "CellN " << ks.sKCoord( s, 0 ) << " " << ks.sKCoord( s, 1 ) << " " << ks.sKCoord( s, 2 )
-        << " " << ks.sSign( s ) << (sharp ? " 1.0 0.0 0.0" : " 0.5 0.5 1.0" )
+        // << " " << ks.sSign( s ) << (sharp ? " 1.0 0.0 0.0" : " 0.5 0.5 1.0" )
+        << " " << ks.sSign( s ) 
+        << " " << (((float)c.red())/255.0)
+        << " " << (((float)c.green())/255.0)
+        << " " << (((float)c.blue())/255.0)
         << " " << n[ 0 ] << " " << n[ 1 ] << " " << n[ 2 ] << std::endl;
-      viewer.setFillColor( sharp ? DGtal::Color( 255, 0.0, 0.0 ) : DGtal::Color( 128, 128, 255 ) );
+      // viewer.setFillColor( sharp ? DGtal::Color( 255, 0.0, 0.0 ) : DGtal::Color( 128, 128, 255 ) );
+      viewer.setFillColor( c );
       viewer << s;
     }
   trace.endBlock();
@@ -384,6 +400,7 @@ int main( int argc, char** argv )
     ("thresholdMax,M",  po::value<int>()->default_value(255), "threshold max (included) to define binary shape" )
     ("R-radius,R", po::value<double>()->default_value( 5 ), "the parameter R in the VCM." )
     ("r-radius,r", po::value<double>()->default_value( 3 ), "the parameter r in the VCM." )
+    ("kernel,k", po::value<std::string>()->default_value( "hat" ), "the function chi_r, either hat or ball." )
     ("trivial-radius,t", po::value<double>()->default_value( 3 ), "the parameter r for the trivial normal estimator." )
     ("angle-threshold,T", po::value<double>()->default_value( 1 ), "the angle threshold for feature detection.")
     ("embedding,E", po::value<int>()->default_value( 0 ), "the surfel -> point embedding: 0: Pointels, 1: InnerSpel, 2: OuterSpel." )
@@ -462,12 +479,26 @@ int main( int argc, char** argv )
       viewer.show();
 
       std::ofstream output1( "titi-vcm-features.txt" );
-      computeSurfaceVCMFeatures( viewer, output1, 
-                                 surface, 
-                                 vm["R-radius"].as<double>(), vm["r-radius"].as<double>(),
-                                 vm["trivial-radius"].as<double>(),
-                                 vm["embedding"].as<int>(),
-                                 vm["angle-threshold"].as<double>() );
+      std::string kernel = vm[ "kernel" ].as<std::string>();
+      if ( kernel == "hat" ) {
+        typedef HatPointFunction<Point,double> KernelFunction;
+        computeSurfaceVCMFeatures( viewer, output1, 
+                                   surface, 
+                                   vm["R-radius"].as<double>(), vm["r-radius"].as<double>(),
+                                   KernelFunction( 1.0, vm["r-radius"].as<double>() ),
+                                   vm["trivial-radius"].as<double>(),
+                                   vm["embedding"].as<int>(),
+                                   vm["angle-threshold"].as<double>() );
+      } else if ( kernel == "ball" ) {
+        typedef BallConstantPointFunction<Point,double> KernelFunction;
+        computeSurfaceVCMFeatures( viewer, output1, 
+                                   surface, 
+                                   vm["R-radius"].as<double>(), vm["r-radius"].as<double>(),
+                                   KernelFunction( 1.0, vm["r-radius"].as<double>() ),
+                                   vm["trivial-radius"].as<double>(),
+                                   vm["embedding"].as<int>(),
+                                   vm["angle-threshold"].as<double>() );
+      }
       output1.close();
       viewer << Viewer3D<>::updateDisplay;
       return application.exec();
