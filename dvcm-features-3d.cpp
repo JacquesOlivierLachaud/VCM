@@ -452,6 +452,10 @@ int main( int argc, char** argv )
       Domain domain = image.domain();
       typedef IntervalForegroundPredicate<Image> ThresholdedImage;
       ThresholdedImage thresholdedImage( image, thresholdMin, thresholdMax );
+      Point dsize = domain.upperBound() - domain.lowerBound();
+      trace.info() << "Image size = " << dsize[ 0 ]
+                   << "x" << dsize[ 1 ]
+                   << "x" << dsize[ 2 ] << std::endl;
       trace.endBlock();
       trace.beginBlock( "Extracting boundary by scanning the space. " );
       bool space_ok = ks.init( image.domain().lowerBound(),
