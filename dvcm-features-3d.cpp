@@ -348,7 +348,7 @@ void computeSurfaceVCMFeatures( Viewer& viewer,
   VCMOnSurface vcm_surface( surface, embType, R, r, chi, trivial_r, Metric(), true );
 
   trace.beginBlock ( "Export des normales." );
-  double l1, l2, l3;
+  VectorN lambdas;
   DGtal::GradientColorMap<double> grad( 0, T );
   grad.addColor( DGtal::Color( 128, 128, 255 ) );
   grad.addColor( DGtal::Color( 128, 128, 255 ) );
@@ -356,14 +356,14 @@ void computeSurfaceVCMFeatures( Viewer& viewer,
   grad.addColor( DGtal::Color( 128, 255, 255 ) );
   grad.addColor( DGtal::Color( 255, 255, 0 ) );
   grad.addColor( DGtal::Color( 255, 0, 0 ) );
-  for ( S2NConstIterator it = vcm_surface.surfelNormals().begin(), 
-          itE = vcm_surface.surfelNormals().end(); it != itE; ++it )
+  for ( S2NConstIterator it = vcm_surface.mapSurfel2Normals().begin(), 
+          itE = vcm_surface.mapSurfel2Normals().end(); it != itE; ++it )
     {
       Surfel s = it->first;
       const VectorN & n = it->second.vcmNormal;
       const VectorN & t = it->second.trivialNormal;
-      vcm_surface.getEigenvalues( l1, l2, l3, s );
-      double ratio = l2 / (l1+l2+l3); // some alpha^2/2
+      vcm_surface.getChiVCMEigenvalues( lambdas, s );
+      double ratio = lambdas[1] / (lambdas[0]+lambdas[1]+lambdas[2]); // some alpha^2/2
       //std::cout << " " << ratio;
       if ( ratio > T ) ratio = T;
       Color c = grad( ratio );
