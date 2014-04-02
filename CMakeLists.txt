@@ -65,6 +65,8 @@ SET(VCM_QGL_SRC
   noisyImplicitShape3NormalEstimation
   )
 
+#add_definitions( -DWITH_EIGEN=YES )
+
 FOREACH(FILE ${VCM_SRC})
   add_executable(${FILE} ${FILE})
   target_link_libraries (${FILE} ${DGTAL_LIBRARIES} ${VCMLibDependencies})

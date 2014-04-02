@@ -346,8 +346,8 @@ void computeSurfaceVCM( std::ostream& output_vcm,
 
   trace.beginBlock ( "Export des normales." );
   std::map<Surfel,RealVector> surfel2normals;
-  for ( S2NConstIterator it = vcm_surface.surfelNormals().begin(), 
-          itE = vcm_surface.surfelNormals().end(); it != itE; ++it )
+  for ( S2NConstIterator it = vcm_surface.mapSurfel2Normals().begin(), 
+          itE = vcm_surface.mapSurfel2Normals().end(); it != itE; ++it )
     {
       Surfel s = it->first;
       const VectorN & n = it->second.vcmNormal;
@@ -528,7 +528,7 @@ int main( int argc, char** argv )
   //   charSet.setValue( *it, true );
 
   // Display input set.
-  Viewer3D<> viewer;
+  Viewer3D<> viewer( ks );
   viewer.setWindowTitle("Voronoi 3D viewer");
   viewer.show();
 

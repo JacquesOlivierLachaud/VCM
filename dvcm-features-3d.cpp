@@ -325,6 +325,7 @@ void computeSurfaceVCMFeatures( Viewer& viewer,
   BOOST_CONCEPT_ASSERT(( CDigitalSurfaceContainer<DigitalSurfaceContainer> ));
   typedef typename Surface::KSpace KSpace; 
   typedef typename Surface::Surfel Surfel;
+  typedef typename Surface::Cell Cell;
   typedef typename KSpace::Space Space;
   typedef typename Space::Point Point;
   typedef ExactPredicateLpSeparableMetric<Space, 2> Metric; // L2-metric
@@ -348,7 +349,7 @@ void computeSurfaceVCMFeatures( Viewer& viewer,
   VCMOnSurface vcm_surface( surface, embType, R, r, chi, trivial_r, Metric(), true );
 
   trace.beginBlock ( "Export des normales." );
-  double l1, l2, l3;
+  VectorN lambda; // eigenvalues of chi-vcm
   DGtal::GradientColorMap<double> grad( 0, T );
   grad.addColor( DGtal::Color( 128, 128, 255 ) );
   grad.addColor( DGtal::Color( 128, 128, 255 ) );
@@ -356,14 +357,17 @@ void computeSurfaceVCMFeatures( Viewer& viewer,
   grad.addColor( DGtal::Color( 128, 255, 255 ) );
   grad.addColor( DGtal::Color( 255, 255, 0 ) );
   grad.addColor( DGtal::Color( 255, 0, 0 ) );
-  for ( S2NConstIterator it = vcm_surface.surfelNormals().begin(), 
-          itE = vcm_surface.surfelNormals().end(); it != itE; ++it )
+  Cell dummy;
+  viewer << SetMode3D( dummy.className(), "Basic" );
+
+  for ( S2NConstIterator it = vcm_surface.mapSurfel2Normals().begin(), 
+          itE = vcm_surface.mapSurfel2Normals().end(); it != itE; ++it )
     {
       Surfel s = it->first;
       const VectorN & n = it->second.vcmNormal;
       const VectorN & t = it->second.trivialNormal;
-      vcm_surface.getEigenvalues( l1, l2, l3, s );
-      double ratio = l2 / (l1+l2+l3); // some alpha^2/2
+      vcm_surface.getChiVCMEigenvalues( lambda, s );
+      double ratio = lambda[ 1 ] / ( lambda[ 0 ] + lambda[ 1 ] + lambda[ 2 ] ); // 3D !!!
       //std::cout << " " << ratio;
       if ( ratio > T ) ratio = T;
       Color c = grad( ratio );
@@ -378,7 +382,7 @@ void computeSurfaceVCMFeatures( Viewer& viewer,
         << " " << n[ 0 ] << " " << n[ 1 ] << " " << n[ 2 ] << std::endl;
       // viewer.setFillColor( sharp ? DGtal::Color( 255, 0.0, 0.0 ) : DGtal::Color( 128, 128, 255 ) );
       viewer.setFillColor( c );
-      viewer << s;
+      viewer << ks.unsigns( s );
     }
   trace.endBlock();
   
@@ -478,7 +482,7 @@ int main( int argc, char** argv )
                    << std::endl;
       trace.endBlock();
 
-      Viewer3D<> viewer;
+      Viewer3D<> viewer( ks );
       viewer.setWindowTitle("Voronoi 3D viewer");
       viewer.show();
 

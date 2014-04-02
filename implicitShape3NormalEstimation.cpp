@@ -284,7 +284,7 @@ int main( int argc, char** argv )
   typedef TrueDigitalSurfaceLocalEstimator<KSpace, ImplicitShape, NormalFunctor> TrueEstimator;
   TrueEstimator true_estimator( K, NormalFunctor() );
   true_estimator.attach( shape );
-  true_estimator.init( h );
+  true_estimator.init( h, ptrSurface->begin(), ptrSurface->end() );
 
   if ( nameEstimator == "VCM" )
     {
