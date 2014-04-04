@@ -359,7 +359,6 @@ void computeSurfaceVCMFeatures( Viewer& viewer,
   grad.addColor( DGtal::Color( 255, 0, 0 ) );
   Cell dummy;
   viewer << SetMode3D( dummy.className(), "Basic" );
-
   for ( S2NConstIterator it = vcm_surface.mapSurfel2Normals().begin(), 
           itE = vcm_surface.mapSurfel2Normals().end(); it != itE; ++it )
     {
