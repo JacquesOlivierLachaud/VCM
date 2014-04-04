@@ -310,7 +310,8 @@ int main( int argc, char** argv )
   trace.beginBlock( "Setting up estimators." );
   typedef ShapeGeometricFunctors::ShapeNormalVectorFunctor<ImplicitShape> NormalFunctor;
   typedef TrueDigitalSurfaceLocalEstimator<KSpace, ImplicitShape, NormalFunctor> TrueEstimator;
-  TrueEstimator true_estimator( K, NormalFunctor() );
+  TrueEstimator true_estimator;
+  true_estimator.setParams( K, NormalFunctor() );
   true_estimator.attach( shape );
   true_estimator.init( h, ptrSurface->begin(), ptrSurface->end() );
 
