@@ -43,7 +43,7 @@
 #include "DGtal/topology/LightImplicitDigitalSurface.h"
 #include "DGtal/geometry/surfaces/estimation/CNormalVectorEstimator.h"
 #include "DGtal/geometry/surfaces/estimation/VoronoiCovarianceMeasureOnDigitalSurface.h"
-#include "DGtal/geometry/surfaces/estimation/VCMDigitalSurfaceNormalEstimator.h"
+#include "DGtal/geometry/surfaces/estimation/VCMDigitalSurfaceEstimator.h"
 #include "DGtal/geometry/surfaces/estimation/TrueDigitalSurfaceLocalEstimator.h"
 #include "DGtal/geometry/volumes/KanungoNoise.h"
 #include "DGtal/shapes/GaussDigitizer.h"
@@ -332,8 +332,9 @@ int main( int argc, char** argv )
         typedef HatPointFunction<Point,double> KernelFunction;
         typedef VoronoiCovarianceMeasureOnDigitalSurface<SurfaceContainer,Metric,
                                                          KernelFunction> VCMOnSurface;
-        typedef VCMDigitalSurfaceNormalEstimator<SurfaceContainer,Metric,
-                                                 KernelFunction> VCMNormalEstimator;
+        typedef VCMGeometricFunctors::VCMNormalVectorFunctor<VCMOnSurface> NormalFunctor;
+        typedef VCMDigitalSurfaceEstimator<SurfaceContainer,Metric,
+                                           KernelFunction, NormalFunctor> VCMNormalEstimator;
         trace.beginBlock("Computing VCM on surface." );
         KernelFunction chi_r( 1.0, r );
         CountedPtr<VCMOnSurface> vcm_surface( new VCMOnSurface( ptrSurface, embType,
@@ -358,8 +359,9 @@ int main( int argc, char** argv )
         typedef BallConstantPointFunction<Point,double> KernelFunction;
         typedef VoronoiCovarianceMeasureOnDigitalSurface<SurfaceContainer,Metric,
                                                          KernelFunction> VCMOnSurface;
-        typedef VCMDigitalSurfaceNormalEstimator<SurfaceContainer,Metric,
-                                                 KernelFunction> VCMNormalEstimator;
+        typedef VCMGeometricFunctors::VCMNormalVectorFunctor<VCMOnSurface> NormalFunctor;
+        typedef VCMDigitalSurfaceEstimator<SurfaceContainer,Metric,
+                                           KernelFunction, NormalFunctor> VCMNormalEstimator;
         trace.beginBlock("Computing VCM on surface." );
         KernelFunction chi_r( 1.0, r );
         CountedPtr<VCMOnSurface> vcm_surface( new VCMOnSurface( ptrSurface, embType,

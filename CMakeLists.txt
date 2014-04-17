@@ -63,6 +63,7 @@ SET(VCM_QGL_SRC
   dvcm-features-3d
   implicitShape3NormalEstimation
   noisyImplicitShape3NormalEstimation
+  genericNormalEstimator
   )
 
 #add_definitions( -DWITH_EIGEN=YES )
@@ -77,7 +78,7 @@ FOREACH(FILE ${VCM_SRC})
 ENDFOREACH(FILE)
 
 
-if ( WITH_VISU3D_QGLVIEWER AND WITH_EIGEN )
+if ( WITH_VISU3D_QGLVIEWER )
   FOREACH(FILE ${VCM_QGL_SRC}) 
     add_executable(${FILE} ${FILE})
     target_link_libraries ( ${FILE} ${DGTAL_LIBRARIES} ${VCMLibDependencies})   
@@ -86,6 +87,6 @@ if ( WITH_VISU3D_QGLVIEWER AND WITH_EIGEN )
         LIBRARY DESTINATION lib
         ARCHIVE DESTINATION lib)
   ENDFOREACH(FILE)
-endif ( WITH_VISU3D_QGLVIEWER AND WITH_EIGEN )
+endif ( WITH_VISU3D_QGLVIEWER )
 
 
