@@ -37,13 +37,15 @@
 #include <boost/program_options/variables_map.hpp>
 
 #include "DGtal/base/Common.h"
+#include "DGtal/base/CountedPtr.h"
+#include "DGtal/base/CountedConstPtrOrConstPtr.h"
 #include "DGtal/helpers/StdDefs.h"
 #include "DGtal/math/Statistic.h"
 #include "DGtal/math/MPolynomial.h"
 #include "DGtal/topology/LightImplicitDigitalSurface.h"
 #include "DGtal/geometry/surfaces/estimation/CNormalVectorEstimator.h"
 #include "DGtal/geometry/surfaces/estimation/VoronoiCovarianceMeasureOnDigitalSurface.h"
-#include "DGtal/geometry/surfaces/estimation/VCMDigitalSurfaceEstimator.h"
+#include "DGtal/geometry/surfaces/estimation/VCMDigitalSurfaceLocalEstimator.h"
 #include "DGtal/geometry/surfaces/estimation/TrueDigitalSurfaceLocalEstimator.h"
 #include "DGtal/geometry/volumes/KanungoNoise.h"
 #include "DGtal/shapes/GaussDigitizer.h"
@@ -58,16 +60,29 @@ namespace po = boost::program_options;
 template <typename KSpace,
           typename ImplicitShape,
           typename Surface,
+          typename Estimator>
+void computeEstimation
+( const po::variables_map& vm,     //< command-line parameters
+  const KSpace& K,                 //< cellular grid space
+  const ImplicitShape& shape, //< implicit shape "ground truth"
+  const Surface& surface,     //< digital surface approximating shape
+  Estimator& estimator )           //< an initialized estimator
+{
+}
+
+template <typename KSpace,
+          typename ImplicitShape,
+          typename Surface,
           typename KernelFunction>
 void chooseEstimator
 ( const po::variables_map& vm,     //< command-line parameters
   const KSpace& K,                 //< cellular grid space
-  ConstAlias<ImplicitShape> shape, //< implicit shape "ground truth"
-  ConstAlias<Surface> surface,     //< digital surface approximating shape
-  ConstAlias<KernelFunction> chi ) //< the kernel function
+  const ImplicitShape& shape, //< implicit shape "ground truth"
+  const Surface& surface,     //< digital surface approximating shape
+  const KernelFunction& chi ) //< the kernel function
 {
   string nameEstimator = vm[ "estimator" ].as<string>();
-  ConstCountedPtrOrConstPtr<Surface> ptrSurface( surface );
+  double h = vm["gridstep"].as<double>();
   if ( nameEstimator == "True" )
     {
       trace.beginBlock( "Setting up True estimator." );
@@ -76,62 +91,34 @@ void chooseEstimator
       TrueEstimator true_estimator;
       true_estimator.attach( shape );
       true_estimator.setParams( K, NormalFunctor(), 20, 0.1, 0.01 );
-      true_estimator.init( h, ptrSurface->begin(), ptrSurface->end() );
+      true_estimator.init( h, surface.begin(), surface.end() );
       trace.endBlock();
     }
   else if ( nameEstimator == "VCM" )
     {
+      trace.beginBlock( "Setting up VCM estimator." );
+      typedef typename KSpace::Space Space;
+      typedef typename Surface::DigitalSurfaceContainer SurfaceContainer;
       typedef ExactPredicateLpSeparableMetric<Space,2> Metric;
-      int embedding = vm["embedding"].as<int>();
-      Surfel2PointEmbedding embType = embedding == 0 ? Pointels :
-                                      embedding == 1 ? InnerSpel : OuterSpel;     
-      Scalar R = vm["R-radius"].as<double>();
-      Scalar r = vm["r-radius"].as<double>();
-      Scalar t = vm["trivial-radius"].as<double>();
-      Scalar alpha = vm["alpha"].as<double>();
-      if ( alpha != 0.0 ) R *= pow( h, alpha-1.0 );
-      if ( alpha != 0.0 ) r *= pow( h, alpha-1.0 );
       typedef VoronoiCovarianceMeasureOnDigitalSurface<SurfaceContainer,Metric,
                                                        KernelFunction> VCMOnSurface;
       typedef VCMGeometricFunctors::VCMNormalVectorFunctor<VCMOnSurface> NormalFunctor;
-      typedef VCMDigitalSurfaceEstimator<SurfaceContainer,Metric,
-                                         KernelFunction, NormalFunctor> VCMNormalEstimator;
-      VCMNormalEstimator estimator( vcm_surface );
-
-      CountedPtr<VCMOnSurface> vcm_surface( new VCMOnSurface( ptrSurface, embType,
-                                                              R, r, chi_r,
-                                                                t, Metric(), true ) );
-        estimator.init( h, ptrSurface->begin(), ptrSurface->end() );
-        trace.endBlock();
-      } else if ( kernel == "ball" ) {
-        typedef BallConstantPointFunction<Point,double> KernelFunction;
-        typedef VoronoiCovarianceMeasureOnDigitalSurface<SurfaceContainer,Metric,
-                                                         KernelFunction> VCMOnSurface;
-        typedef VCMGeometricFunctors::VCMNormalVectorFunctor<VCMOnSurface> NormalFunctor;
-        typedef VCMDigitalSurfaceEstimator<SurfaceContainer,Metric,
-                                           KernelFunction, NormalFunctor> VCMNormalEstimator;
-        trace.beginBlock("Computing VCM on surface." );
-        KernelFunction chi_r( 1.0, r );
-        CountedPtr<VCMOnSurface> vcm_surface( new VCMOnSurface( ptrSurface, embType,
-                                                                R, r, chi_r,
-                                                                t, Metric(), true ) );
-        VCMNormalEstimator estimator( vcm_surface );
-        trace.info() << "# VCM estimation: h=" << h << " R=" << R 
-                     << " r=" << r << " ball" << std::endl;
-        error_output << "# VCM estimation: h=" << h << " R=" << R 
-                     << " r=" << r << " ball" << std::endl;
-        if ( toExport )
-          export_output << "# VCM estimation: h=" << h << " R=" << R 
-                        << " r=" << r << " ball" << std::endl;
-        trace.endBlock();
-        trace.beginBlock("Statistics and export." );
-        computeNormalEstimation( *ptrSurface, estimator, true_estimator,
-                                 error_output, export_output, toExport );
-        if ( vm.count( "noff" ) )
-          exportNOFFSurface( *ptrSurface, estimator, noff_output );
-        trace.endBlock();
-      }
-
+      typedef VCMDigitalSurfaceLocalEstimator<SurfaceContainer,Metric,
+                                              KernelFunction, NormalFunctor> VCMNormalEstimator;
+      int embedding = vm["embedding"].as<int>();
+      Surfel2PointEmbedding embType = embedding == 0 ? Pointels :
+                                      embedding == 1 ? InnerSpel : OuterSpel;     
+      double R = vm["R-radius"].as<double>();
+      double r = vm["r-radius"].as<double>();
+      double t = vm["trivial-radius"].as<double>();
+      double alpha = vm["alpha"].as<double>();
+      if ( alpha != 0.0 ) R *= pow( h, alpha-1.0 );
+      if ( alpha != 0.0 ) r *= pow( h, alpha-1.0 );
+      VCMNormalEstimator estimator;
+      estimator.attach( surface );
+      estimator.setParams( embType, R, r, chi, t, Metric(), true );
+      estimator.init( h, surface.begin(), surface.end() );
+      trace.endBlock();
     }
 
 }
@@ -142,15 +129,21 @@ template <typename KSpace,
 void chooseKernel
 ( const po::variables_map& vm,     //< command-line parameters
   const KSpace& K,                 //< cellular grid space
-  ConstAlias<ImplicitShape> shape, //< implicit shape "ground truth"
-  ConstAlias<Surface> surface )    //< digital surface approximating shape
+  const ImplicitShape& shape, //< implicit shape "ground truth"
+  const Surface& surface )    //< digital surface approximating shape
 {
   string kernel = vm[ "kernel" ].as<string>();
+  double h = vm["gridstep"].as<double>();
+  double r = vm["r-radius"].as<double>();
+  double alpha = vm["alpha"].as<double>();
+  if ( alpha != 0.0 ) r *= pow( h, alpha-1.0 );
   if ( kernel == "hat" ) {
+    typedef typename KSpace::Point Point;
     typedef HatPointFunction<Point,double> KernelFunction;
     KernelFunction chi_r( 1.0, r );
     chooseEstimator( vm, K, shape, surface, chi_r );
   } else if ( kernel == "ball" ) {
+    typedef typename KSpace::Point Point;
     typedef BallConstantPointFunction<Point,double> KernelFunction;
     KernelFunction chi_r( 1.0, r );
     chooseEstimator( vm, K, shape, surface, chi_r );
@@ -267,6 +260,7 @@ int main( int argc, char** argv )
       CountedPtr<Surface> ptrSurface( new Surface( surfaceContainer ) ); // acquired
       trace.info() << "- surface component has " << ptrSurface->size() << " surfels." << std::endl; 
       trace.endBlock();
+      chooseKernel( vm, K, *shape, *ptrSurface );
     }
   else
     { // noise
@@ -299,6 +293,7 @@ int main( int argc, char** argv )
           return 4;
         }
       trace.info() << "- surface component has " << nb_surfels << " surfels." << std::endl; 
+      chooseKernel( vm, K, *shape, *ptrSurface );
       trace.endBlock();
     }
   return 0;
