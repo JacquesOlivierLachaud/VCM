@@ -60,14 +60,76 @@ namespace po = boost::program_options;
 template <typename KSpace,
           typename ImplicitShape,
           typename Surface,
+          typename TrueEstimator,
           typename Estimator>
 void computeEstimation
 ( const po::variables_map& vm,     //< command-line parameters
   const KSpace& K,                 //< cellular grid space
-  const ImplicitShape& shape, //< implicit shape "ground truth"
-  const Surface& surface,     //< digital surface approximating shape
+  const ImplicitShape& shape,      //< implicit shape "ground truth"
+  const Surface& surface,          //< digital surface approximating shape
+  TrueEstimator& true_estimator,   //< "ground truth" estimator
   Estimator& estimator )           //< an initialized estimator
 {
+  typedef typename Surface::ConstIterator ConstIterator;
+  typedef typename Surface::Surfel Surfel;
+  typedef typename Estimator::Quantity Quantity;
+  typedef double Scalar;
+
+  std::string fname = vm[ "output" ].as<std::string>();
+  string nameEstimator = vm[ "estimator" ].as<string>();
+  if ( vm.count( "angle-deviation-stats" ) )
+    {
+      trace.beginBlock( "Computing angle deviation error stats." );
+      std::ostringstream adev_sstr;
+      adev_sstr << fname << "-" << nameEstimator << "-angle-deviation-" 
+                << estimator.h() << ".txt"; 
+      DGtal::Statistic<Scalar> adev_stat;
+      for ( ConstIterator it = surface.begin(), itE = surface.end(); it != itE; ++it )
+        {
+          Quantity n_est = estimator.eval( it );
+          Quantity n_true_est = true_estimator.eval( it );
+          Scalar angle_error = acos( n_est.dot( n_true_est ) );
+          adev_stat.addValue( angle_error );
+        }
+      adev_stat.terminate();
+      std::ofstream adev_output( adev_sstr.str().c_str() );
+      adev_output << "# Average error X of the absolute angle between two vector estimations." << std::endl;
+      adev_output << "# h L1 L2 Loo E[X] Var[X] Min[X] Max[X] Nb[X]" << std::endl;
+      adev_output << estimator.h() 
+                  << " " << adev_stat.mean() // L1
+                  << " " << sqrt( adev_stat.unbiasedVariance()
+                                  + adev_stat.mean()*adev_stat.mean() ) // L2
+                  << " " << adev_stat.max() // Loo
+                  << " " << adev_stat.mean() // E[X] (=L1)
+                  << " " << adev_stat.unbiasedVariance() // Var[X]
+                  << " " << adev_stat.min() // Min[X]
+                  << " " << adev_stat.max() // Max[X]
+                  << " " << adev_stat.samples() // Nb[X]
+                  << std::endl;
+      adev_output.close();
+      trace.endBlock();
+    }
+  if ( vm.count( "export" ) )
+    {
+      trace.beginBlock( "Exporting cell geometry." );
+      std::ostringstream export_sstr;
+      export_sstr << fname << "-" << nameEstimator << "-cells-" 
+                  << estimator.h() << ".txt"; 
+      std::ofstream export_output( export_sstr.str().c_str() );
+      for ( ConstIterator it = surface.begin(), itE = surface.end(); it != itE; ++it )
+        {
+          Quantity n_est = estimator.eval( it );
+          Surfel s = *it;
+          export_output
+            << "CellN " 
+            << (256+K.sKCoord( s, 0 )) << " " << (256+K.sKCoord( s, 1 ))
+            << " " << (256+K.sKCoord( s, 2 )) << " " << K.sSign( s ) << " 0.5 0.5 1.0" 
+            << " " << n_est[ 0 ] << " " << n_est[ 1 ] << " " << n_est[ 2 ] << std::endl;
+        }
+      export_output.close();
+      trace.endBlock();
+    }
+      
 }
 
 template <typename KSpace,
@@ -83,20 +145,26 @@ void chooseEstimator
 {
   string nameEstimator = vm[ "estimator" ].as<string>();
   double h = vm["gridstep"].as<double>();
+  typedef ShapeGeometricFunctors::ShapeNormalVectorFunctor<ImplicitShape> NormalFunctor;
+  typedef TrueDigitalSurfaceLocalEstimator<KSpace, ImplicitShape, NormalFunctor> TrueEstimator;
+  TrueEstimator true_estimator;
+  true_estimator.attach( shape );
+  true_estimator.setParams( K, NormalFunctor(), 20, 0.1, 0.01 );
+  true_estimator.init( h, surface.begin(), surface.end() );
   if ( nameEstimator == "True" )
     {
-      trace.beginBlock( "Setting up True estimator." );
-      typedef ShapeGeometricFunctors::ShapeNormalVectorFunctor<ImplicitShape> NormalFunctor;
-      typedef TrueDigitalSurfaceLocalEstimator<KSpace, ImplicitShape, NormalFunctor> TrueEstimator;
-      TrueEstimator true_estimator;
-      true_estimator.attach( shape );
-      true_estimator.setParams( K, NormalFunctor(), 20, 0.1, 0.01 );
-      true_estimator.init( h, surface.begin(), surface.end() );
+      trace.beginBlock( "Chosen estimator is: True." );
+      typedef TrueDigitalSurfaceLocalEstimator<KSpace, ImplicitShape, NormalFunctor> Estimator;
+      Estimator estimator;
+      estimator.attach( shape );
+      estimator.setParams( K, NormalFunctor(), 20, 0.1, 0.01 );
+      estimator.init( h, surface.begin(), surface.end() );
       trace.endBlock();
+      computeEstimation( vm, K, shape, surface, true_estimator, estimator );
     }
-  else if ( nameEstimator == "VCM" )
+  if ( nameEstimator == "VCM" )
     {
-      trace.beginBlock( "Setting up VCM estimator." );
+      trace.beginBlock( "Chosen estimator is: VCM." );
       typedef typename KSpace::Space Space;
       typedef typename Surface::DigitalSurfaceContainer SurfaceContainer;
       typedef ExactPredicateLpSeparableMetric<Space,2> Metric;
@@ -119,6 +187,7 @@ void chooseEstimator
       estimator.setParams( embType, R, r, chi, t, Metric(), true );
       estimator.init( h, surface.begin(), surface.end() );
       trace.endBlock();
+      computeEstimation( vm, K, shape, surface, true_estimator, estimator );
     }
 
 }
@@ -129,8 +198,8 @@ template <typename KSpace,
 void chooseKernel
 ( const po::variables_map& vm,     //< command-line parameters
   const KSpace& K,                 //< cellular grid space
-  const ImplicitShape& shape, //< implicit shape "ground truth"
-  const Surface& surface )    //< digital surface approximating shape
+  const ImplicitShape& shape,      //< implicit shape "ground truth"
+  const Surface& surface )         //< digital surface approximating shape
 {
   string kernel = vm[ "kernel" ].as<string>();
   double h = vm["gridstep"].as<double>();
@@ -150,7 +219,77 @@ void chooseKernel
   }
 }
 
-          
+template <typename KSpace,
+          typename ImplicitShape,
+          typename ImplicitDigitalShape >
+int chooseSurface
+( const po::variables_map& vm,     //< command-line parameters
+  const KSpace& K,                 //< cellular grid space
+  const ImplicitShape& shape,      //< implicit shape "ground truth"
+  const ImplicitDigitalShape& dshape ) //< analysed implicit digital shape
+{
+  // Selecting a model of surface depending on noise / not noise.
+  typedef double Scalar;
+  Scalar noiseLevel = vm[ "noise" ].as<double>();
+  if ( noiseLevel == 0.0 )
+    { // no noise
+      trace.beginBlock( "Make digital surface..." );
+      typedef LightImplicitDigitalSurface<KSpace,ImplicitDigitalShape> SurfaceContainer;
+      typedef DigitalSurface< SurfaceContainer > Surface;
+      typedef typename Surface::Surfel Surfel;
+      SurfelAdjacency< KSpace::dimension > surfAdj( true );
+      Surfel bel;
+      try {
+        bel = Surfaces<KSpace>::findABel( K, dshape, 10000 );
+      } catch (DGtal::InputException e) {
+        trace.error() << "ERROR Unable to find bel." << std::endl;
+        return 3;
+      }
+      SurfaceContainer* surfaceContainer = new SurfaceContainer( K, dshape, surfAdj, bel );
+      CountedPtr<Surface> ptrSurface( new Surface( surfaceContainer ) ); // acquired
+      trace.info() << "- surface component has " << ptrSurface->size() << " surfels." << std::endl; 
+      trace.endBlock();
+      chooseKernel( vm, K, shape, *ptrSurface );
+    }
+  else
+    { // noise
+      trace.beginBlock( "Make digital surface..." );
+      typedef typename ImplicitDigitalShape::Domain Domain;
+      typedef KanungoNoise< ImplicitDigitalShape, Domain > KanungoPredicate;
+      typedef LightImplicitDigitalSurface< KSpace, KanungoPredicate > SurfaceContainer;
+      typedef DigitalSurface< SurfaceContainer > Surface;
+      typedef typename Surface::Surfel Surfel;
+      SurfelAdjacency< KSpace::dimension > surfAdj( true );
+      Surfel bel;
+      KanungoPredicate* noisified_dshape = new KanungoPredicate( dshape, dshape.getDomain(), noiseLevel );
+      // We have to search for a big connected component.
+      CountedPtr<Surface> ptrSurface;
+      double minsize = dshape.getUpperBound()[0] - dshape.getLowerBound()[0];
+      unsigned int nb_surfels = 0;
+      unsigned int tries = 0;
+      do {
+        try { // Search initial bel
+          bel = Surfaces<KSpace>::findABel( K, *noisified_dshape, 10000 );
+        } catch (DGtal::InputException e) {
+          trace.error() << "ERROR Unable to find bel." << std::endl;
+          return 3;
+        }
+        SurfaceContainer* surfaceContainer = new SurfaceContainer( K, *noisified_dshape, surfAdj, bel );
+        ptrSurface = CountedPtr<Surface>( new Surface( surfaceContainer ) ); // acquired
+        nb_surfels = ptrSurface->size();
+      } while ( ( nb_surfels < 2 * minsize ) && ( tries++ < 150 ) );
+      if( tries >= 150 )
+        {
+          trace.error() << "ERROR cannot find a proper bel in a big enough component." << std::endl;
+          return 4;
+        }
+      trace.info() << "- surface component has " << nb_surfels << " surfels." << std::endl; 
+      trace.endBlock();
+      chooseKernel( vm, K, shape, *ptrSurface );
+    }
+  return 0;
+}
+
 
 ///////////////////////////////////////////////////////////////////////////////
 int main( int argc, char** argv )
@@ -172,8 +311,9 @@ int main( int argc, char** argv )
     ("alpha", po::value<double>()->default_value( 0.0 ), "the parameter alpha in r(h)=r h^alpha (VCM)." )
     ("trivial-radius,t", po::value<double>()->default_value( 3 ), "the parameter t for reorienting the VCM." )
     ("embedding,E", po::value<int>()->default_value( 0 ), "the surfel -> point embedding: 0: Pointels, 1: InnerSpel, 2: OuterSpel." )
-    ("export,x", po::value<string>(), "exports surfel normals which can be viewed with viewSetOfSurfels." )
     ("output,o", po::value<string>(), "the output basename." )
+    ("angle-deviation-stats,S", "computes angle deviation error the output basename." )
+    ("export,x", "exports surfel normals which can be viewed with viewSetOfSurfels." )
     ("noff,n", po::value<string>(), "exports the digital surface with normals as NOFF file <arg>" )
     ;  
   bool parseOK=true;
@@ -192,7 +332,9 @@ int main( int argc, char** argv )
                 << endl
 		<< general_opt << "\n";
       cout << "Example:\n"
-                << "./implicitShape3NormalEstimation -p \"90-3*x^2-2*y^2-z^2\" -o VCM-ellipse -a -10 -A 10 -e VCM -R 3 -r 3 -t 2 -E 0 -x vcm" << endl;
+           << "./genericNormalEstimator -p \"90-3*x^2-2*y^2-z^2\" -o VCM-ellipse -a -10 -A 10 -e VCM -R 3 -r 3 -t 2 -E 0 -x vcm" << endl
+           << " - ellipse : 90-3*x^2-2*y^2-z^2 " << endl
+           << " - torus : 90-3*x^2-2*y^2-z^2 " << endl
       return 0;
     }
   if ( ! vm.count( "polynomial" ) ) 
@@ -223,7 +365,6 @@ int main( int argc, char** argv )
   trace.beginBlock( "Make implicit digital shape..." );
   typedef Z3i::KSpace KSpace;
   typedef KSpace::Point Point;
-  typedef KSpace::Surfel Surfel;
   typedef Space::RealPoint RealPoint;
   typedef GaussDigitizer< Space, ImplicitShape > ImplicitDigitalShape;
   typedef ImplicitDigitalShape::Domain Domain;
@@ -241,61 +382,8 @@ int main( int argc, char** argv )
   trace.info() << "- domain is " << domain << std::endl;
   trace.endBlock();
 
-  // Selecting a model of surface depending on noise / not noise.
-  Scalar noiseLevel = vm[ "noise" ].as<double>();
-  if ( noiseLevel == 0.0 )
-    { // no noise
-      trace.beginBlock( "Make digital surface..." );
-      typedef LightImplicitDigitalSurface<KSpace,ImplicitDigitalShape> SurfaceContainer;
-      typedef DigitalSurface< SurfaceContainer > Surface;
-      SurfelAdjacency< KSpace::dimension > surfAdj( true );
-      Surfel bel;
-      try {
-        bel = Surfaces<KSpace>::findABel( K, *dshape, 10000 );
-      } catch (DGtal::InputException e) {
-        trace.error() << "ERROR Unable to find bel." << std::endl;
-        return 3;
-      }
-      SurfaceContainer* surfaceContainer = new SurfaceContainer( K, *dshape, surfAdj, bel );
-      CountedPtr<Surface> ptrSurface( new Surface( surfaceContainer ) ); // acquired
-      trace.info() << "- surface component has " << ptrSurface->size() << " surfels." << std::endl; 
-      trace.endBlock();
-      chooseKernel( vm, K, *shape, *ptrSurface );
-    }
-  else
-    { // noise
-      trace.beginBlock( "Make digital surface..." );
-      typedef KanungoNoise< ImplicitDigitalShape, Domain > KanungoPredicate;
-      typedef LightImplicitDigitalSurface< KSpace, KanungoPredicate > SurfaceContainer;
-      typedef DigitalSurface< SurfaceContainer > Surface;
-      SurfelAdjacency< KSpace::dimension > surfAdj( true );
-      Surfel bel;
-      KanungoPredicate* noisified_dshape = new KanungoPredicate( *dshape, dshape->getDomain(), noiseLevel );
-      // We have to search for a big connected component.
-      CountedPtr<Surface> ptrSurface;
-      double minsize = dshape->getUpperBound()[0] - dshape->getLowerBound()[0];
-      unsigned int nb_surfels = 0;
-      unsigned int tries = 0;
-      do {
-        try { // Search initial bel
-          bel = Surfaces<KSpace>::findABel( K, *noisified_dshape, 10000 );
-        } catch (DGtal::InputException e) {
-          trace.error() << "ERROR Unable to find bel." << std::endl;
-          return 3;
-        }
-        SurfaceContainer* surfaceContainer = new SurfaceContainer( K, *noisified_dshape, surfAdj, bel );
-        ptrSurface = CountedPtr<Surface>( new Surface( surfaceContainer ) ); // acquired
-        nb_surfels = ptrSurface->size();
-      } while ( ( nb_surfels < 2 * minsize ) && ( tries++ < 150 ) );
-      if( tries >= 150 )
-        {
-          trace.error() << "ERROR cannot find a proper bel in a big enough component." << std::endl;
-          return 4;
-        }
-      trace.info() << "- surface component has " << nb_surfels << " surfels." << std::endl; 
-      chooseKernel( vm, K, *shape, *ptrSurface );
-      trace.endBlock();
-    }
+  chooseSurface( vm, K, *shape, *dshape );
+
   return 0;
 }
 
