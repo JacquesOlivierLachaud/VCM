@@ -15,7 +15,7 @@
  **/
 
 /**
- * @file noisyImplicitShape3NormalEstimation.cpp
+ * @file genericNormalEstimator.cpp
  * @author Jacques-Olivier Lachaud (\c jacques-olivier.lachaud@univ-savoie.fr )
  * Laboratory of Mathematics (CNRS, UMR 5127), University of Savoie, France
  *
@@ -36,6 +36,10 @@
 #include <boost/program_options/parsers.hpp>
 #include <boost/program_options/variables_map.hpp>
 
+#ifdef WITH_VISU3D_QGLVIEWER
+#include <QtGui/qapplication.h>
+#endif
+
 #include "DGtal/base/Common.h"
 #include "DGtal/base/CountedPtr.h"
 #include "DGtal/base/CountedConstPtrOrConstPtr.h"
@@ -52,6 +56,11 @@
 #include "DGtal/shapes/ShapeGeometricFunctors.h"
 #include "DGtal/shapes/implicit/ImplicitPolynomial3Shape.h"
 #include "DGtal/io/readers/MPolynomialReader.h"
+#include "DGtal/io/colormaps/GradientColorMap.h"
+#ifdef WITH_VISU3D_QGLVIEWER
+#include "DGtal/io/viewers/Viewer3D.h"
+#include "DGtal/io/Display3DFactory.h"
+#endif
 
 using namespace std;
 using namespace DGtal;
@@ -147,6 +156,19 @@ void computeEstimation
   typedef typename Estimator::Quantity Quantity;
   typedef double Scalar;
 
+  DGtal::GradientColorMap<double> grad( 0.0, 40.0 );
+  // 0 metallic blue, 5 light cyan, 10 light green, 15 light
+  // yellow, 20 yellow, 25 orange, 30 red, 35, dark red, 40- grey
+  grad.addColor( DGtal::Color( 128, 128, 255 ) ); // 0
+  grad.addColor( DGtal::Color( 128, 255, 255 ) ); // 5
+  grad.addColor( DGtal::Color( 128, 255, 128 ) ); // 10
+  grad.addColor( DGtal::Color( 255, 255, 128 ) ); // 15
+  grad.addColor( DGtal::Color( 255, 255, 0   ) ); // 20
+  grad.addColor( DGtal::Color( 255, 128, 0   ) ); // 25
+  grad.addColor( DGtal::Color( 255,   0, 0   ) ); // 30
+  grad.addColor( DGtal::Color( 128,   0, 0   ) ); // 35
+  grad.addColor( DGtal::Color( 128, 128, 128 ) ); // 40
+
   std::string fname = vm[ "output" ].as<std::string>();
   string nameEstimator = vm[ "estimator" ].as<string>();
   if ( vm.count( "angle-deviation-stats" ) )
@@ -181,24 +203,33 @@ void computeEstimation
       adev_output.close();
       trace.endBlock();
     }
-  if ( vm.count( "export" ) )
+  if ( vm[ "export" ].as<string>() != "None" )
     {
       trace.beginBlock( "Exporting cell geometry." );
       std::ostringstream export_sstr;
       export_sstr << fname << "-" << nameEstimator << "-cells-" 
                   << estimator.h() << ".txt"; 
       std::ofstream export_output( export_sstr.str().c_str() );
+      bool adev =  vm[ "export" ].as<string>() == "AngleDeviation";
       for ( ConstIterator it = surface.begin(), itE = surface.end(); it != itE; ++it )
         {
           Quantity n_est = estimator.eval( it );
+          Quantity n_true_est = true_estimator.eval( it );
+          Scalar angle_error = acos( n_est.dot( n_true_est ) )*180.0 / 3.14159625;
           Surfel s = *it;
           export_output
             << "CellN" 
             << " " << min( 1023, max( 512+K.sKCoord( s, 0 ), 0 ) )
             << " " << min( 1023, max( 512+K.sKCoord( s, 1 ), 0 ) )
             << " " << min( 1023, max( 512+K.sKCoord( s, 2 ), 0 ) )
-            << " " << K.sSign( s ) << " 0.5 0.5 1.0" 
-            << " " << n_est[ 0 ] << " " << n_est[ 1 ] << " " << n_est[ 2 ] << std::endl;
+            << " " << K.sSign( s );
+          Color c = grad( 0 );
+          if ( adev ) c = grad( max( 0.0, min( angle_error, 40.0 ) ) );
+          export_output << " " << ((double) c.red() / 255.0 )
+                        << " " << ((double) c.green() / 255.0 )
+                        << " " << ((double) c.blue() / 255.0 );
+          export_output << " " << n_est[ 0 ] << " " << n_est[ 1 ] 
+                        << " " << n_est[ 2 ] << std::endl;
         }
       export_output.close();
       trace.endBlock();
@@ -237,6 +268,40 @@ void computeEstimation
       export_output.close();
       trace.endBlock();
     }
+#ifdef WITH_VISU3D_QGLVIEWER
+  if ( vm[ "view" ].as<string>() != "None" )
+    {
+      typedef typename KSpace::Space Space;
+      typedef Viewer3D<Space,KSpace> MyViewever3D;
+      typedef Display3DFactory<Space,KSpace> MyDisplay3DFactory;
+      int argc = 1;
+      char name[] = "Viewer";
+      char* argv[ 1 ];
+      argv[ 0 ] = name;
+      Surfel s;
+      QApplication application( argc, argv );
+      MyViewever3D viewer( K );
+      viewer.show();
+      viewer << SetMode3D( s.className(), "Basic" );
+      trace.beginBlock( "Viewing surface." );
+      bool adev =  vm[ "view" ].as<string>() == "AngleDeviation";
+      for ( ConstIterator it = surface.begin(), itE = surface.end(); it != itE; ++it )
+        {
+          Quantity n_est = estimator.eval( it );
+          Quantity n_true_est = true_estimator.eval( it );
+          Scalar angle_error = acos( n_est.dot( n_true_est ) )*180.0 / 3.14159625;
+          s = *it;
+          Color c = grad( 0 );
+          if ( adev ) c = grad( max( 0.0, min( angle_error, 40.0 ) ) );
+          viewer.setFillColor( c );
+          MyDisplay3DFactory::drawSurfelWithNormal( viewer, K.unsigns( s ), n_est, true );
+        }
+      trace.endBlock();
+      viewer << MyViewever3D::updateDisplay;
+      application.exec();
+    }
+#endif
+
 }
 
 template <typename KSpace,
@@ -420,9 +485,12 @@ int main( int argc, char** argv )
     ("embedding,E", po::value<int>()->default_value( 0 ), "the surfel -> point embedding: 0: Pointels, 1: InnerSpel, 2: OuterSpel." )
     ("output,o", po::value<string>(), "the output basename." )
     ("angle-deviation-stats,S", "computes angle deviation error the output basename." )
-    ("export,x", "exports surfel normals which can be viewed with viewSetOfSurfels." )
+    ("export,x", po::value<string>()->default_value( "None" ), "exports surfel normals which can be viewed with viewSetOfSurfels. <arg> in None|Normals|AngleDeviation. The color depends on the angle deviation in degree: 0 metallic blue, 5 light cyan, 10 light green, 15 light yellow, 20 yellow, 25 orange, 30 red, 35, dark red, 40- grey" )
     ("normals,n", "outputs every surfel, its estimated normal, and the ground truth normal." )
     ("noff,O","exports the digital surface with normals as NOFF file." )
+#ifdef WITH_VISU3D_QGLVIEWER
+    ("view,V", po::value<string>()->default_value( "None" ),"view the digital surface with normals.  <arg> in None|Normals|AngleDeviation. The color depends on the angle deviation in degree: 0 metallic blue, 5 light cyan, 10 light green, 15 light yellow, 20 yellow, 25 orange, 30 red, 35, dark red, 40- grey." )
+#endif
     ;  
   bool parseOK=true;
   po::variables_map vm;
@@ -440,7 +508,7 @@ int main( int argc, char** argv )
                 << endl
 		<< general_opt << "\n";
       cout << "Example:\n"
-           << "./genericNormalEstimator -p \"90-3*x^2-2*y^2-z^2\" -o VCM-ellipse -a -10 -A 10 -e VCM -R 3 -r 3 -t 2 -E 0 -x vcm" << endl
+           << "./genericNormalEstimator -p \"90-3*x^2-2*y^2-z^2\" -o VCM-ellipse -a -10 -A 10 -e VCM -R 3 -r 3 -t 2 -E 0 -x Normals" << endl
            << " - ellipse  : 90-3*x^2-2*y^2-z^2 " << endl
            << " - torus    : -1*(x^2+y^2+z^2+6*6-2*2)^2+4*6*6*(x^2+y^2) " << endl
            << " - rcube    : 6561-x^4-y^4-z^4" << endl
