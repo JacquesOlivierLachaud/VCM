@@ -57,6 +57,78 @@ using namespace std;
 using namespace DGtal;
 namespace po = boost::program_options;
 
+
+template <typename SCell, typename RealVector>
+struct GradientMapAdapter {
+  typedef std::map<SCell,RealVector> SCell2RealVectorMap;
+  typedef SCell                                 Argument;
+  typedef RealVector                               Value;
+  GradientMapAdapter( ConstAlias<SCell2RealVectorMap> map )
+    : myMap( map ) {}
+  RealVector operator()( const Argument& arg ) const
+  {
+    typename SCell2RealVectorMap::const_iterator it = myMap->find( arg );
+    if ( it != myMap->end() ) return it->second;
+    else return RealVector();
+  }
+  CountedConstPtrOrConstPtr<SCell2RealVectorMap> myMap;
+};
+
+template <typename SCellEmbedder>
+struct SCellEmbedderWithNormal : public SCellEmbedder
+{
+  using SCellEmbedder::space;
+  using SCellEmbedder::operator();
+  typedef typename SCellEmbedder::KSpace          KSpace;
+  typedef typename SCellEmbedder::SCell            SCell;
+  typedef typename SCellEmbedder::RealPoint    RealPoint;
+  typedef SCell                                 Argument;
+  typedef RealPoint                                Value;
+  typedef typename KSpace::Space::RealVector  RealVector;
+  typedef std::map<SCell,RealVector> SCell2RealVectorMap;
+  typedef GradientMapAdapter<SCell,RealVector> GradientMap;
+
+  SCellEmbedderWithNormal( ConstAlias<SCellEmbedder> embedder, 
+                           ConstAlias<SCell2RealVectorMap> map )
+    : SCellEmbedder( embedder ), myMap( map )
+  {}
+  
+  GradientMap gradientMap() const
+  {
+    return GradientMap( myMap );
+  }
+
+  CountedConstPtrOrConstPtr<SCell2RealVectorMap> myMap;
+};
+
+template <typename DigitalSurface, 
+          typename Estimator>
+void exportNOFFSurface( const DigitalSurface& surface,
+                        const Estimator& estimator,
+                        std::ostream& output )
+{
+  typedef typename DigitalSurface::KSpace KSpace;
+  typedef typename DigitalSurface::ConstIterator ConstIterator;
+  typedef typename DigitalSurface::Surfel Surfel;
+  typedef typename KSpace::SCell SCell;
+  typedef typename Estimator::Quantity Quantity;
+  const KSpace& ks = surface.container().space();
+  std::map<Surfel,Quantity> normals;
+  for ( ConstIterator it = surface.begin(), itE = surface.end(); it != itE; ++it )
+    {
+      Quantity n_est = estimator.eval( it );
+      normals[ *it ] = n_est;
+    }
+  CanonicSCellEmbedder<KSpace> surfelEmbedder( ks );
+  typedef SCellEmbedderWithNormal< CanonicSCellEmbedder<KSpace> > Embedder;
+  Embedder embedder( surfelEmbedder, normals );
+  surface.exportAs3DNOFF( output, embedder );
+}
+
+
+/**
+   Computes the normal estimations. Outputs statistics or export cell geometry.
+ */
 template <typename KSpace,
           typename ImplicitShape,
           typename Surface,
@@ -121,15 +193,50 @@ void computeEstimation
           Quantity n_est = estimator.eval( it );
           Surfel s = *it;
           export_output
-            << "CellN " 
-            << (256+K.sKCoord( s, 0 )) << " " << (256+K.sKCoord( s, 1 ))
-            << " " << (256+K.sKCoord( s, 2 )) << " " << K.sSign( s ) << " 0.5 0.5 1.0" 
+            << "CellN" 
+            << " " << min( 1023, max( 512+K.sKCoord( s, 0 ), 0 ) )
+            << " " << min( 1023, max( 512+K.sKCoord( s, 1 ), 0 ) )
+            << " " << min( 1023, max( 512+K.sKCoord( s, 2 ), 0 ) )
+            << " " << K.sSign( s ) << " 0.5 0.5 1.0" 
             << " " << n_est[ 0 ] << " " << n_est[ 1 ] << " " << n_est[ 2 ] << std::endl;
         }
       export_output.close();
       trace.endBlock();
     }
-      
+  if ( vm.count( "normals" ) )
+    {
+      trace.beginBlock( "Exporting cells normals." );
+      std::ostringstream export_sstr;
+      export_sstr << fname << "-" << nameEstimator << "-normals-" 
+                  << estimator.h() << ".txt"; 
+      std::ofstream export_output( export_sstr.str().c_str() );
+      export_output << "# kx ky kz sign n_est[0] n_est[1] n_est[2] n_true[0] n_true[1] n_true[2]" << std::endl;
+      for ( ConstIterator it = surface.begin(), itE = surface.end(); it != itE; ++it )
+        {
+          Quantity n_est = estimator.eval( it );
+          Quantity n_true_est = true_estimator.eval( it );
+          Surfel s = *it;
+          export_output
+            << K.sKCoord( s, 0 ) << " " << K.sKCoord( s, 1 ) << " " << K.sKCoord( s, 2 ) 
+            << " " << K.sSign( s )
+            << " " << n_est[ 0 ] << " " << n_est[ 1 ] << " " << n_est[ 2 ]
+            << " " << n_true_est[ 0 ] << " " << n_true_est[ 1 ] << " " << n_true_est[ 2 ]
+            << std::endl;
+        }
+      export_output.close();
+      trace.endBlock();
+    }
+  if ( vm.count( "noff" ) )
+    {
+      trace.beginBlock( "Exporting NOFF file." );
+      std::ostringstream export_sstr;
+      export_sstr << fname << "-" << nameEstimator << "-noff-" 
+                  << estimator.h() << ".off"; 
+      std::ofstream export_output( export_sstr.str().c_str() );
+      exportNOFFSurface( surface, estimator, export_output );
+      export_output.close();
+      trace.endBlock();
+    }
 }
 
 template <typename KSpace,
@@ -314,7 +421,8 @@ int main( int argc, char** argv )
     ("output,o", po::value<string>(), "the output basename." )
     ("angle-deviation-stats,S", "computes angle deviation error the output basename." )
     ("export,x", "exports surfel normals which can be viewed with viewSetOfSurfels." )
-    ("noff,n", po::value<string>(), "exports the digital surface with normals as NOFF file <arg>" )
+    ("normals,n", "outputs every surfel, its estimated normal, and the ground truth normal." )
+    ("noff,O","exports the digital surface with normals as NOFF file." )
     ;  
   bool parseOK=true;
   po::variables_map vm;
