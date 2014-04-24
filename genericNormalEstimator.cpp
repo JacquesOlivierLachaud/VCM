@@ -333,8 +333,15 @@ int main( int argc, char** argv )
 		<< general_opt << "\n";
       cout << "Example:\n"
            << "./genericNormalEstimator -p \"90-3*x^2-2*y^2-z^2\" -o VCM-ellipse -a -10 -A 10 -e VCM -R 3 -r 3 -t 2 -E 0 -x vcm" << endl
-           << " - ellipse : 90-3*x^2-2*y^2-z^2 " << endl
-           << " - torus : 90-3*x^2-2*y^2-z^2 " << endl
+           << " - ellipse  : 90-3*x^2-2*y^2-z^2 " << endl
+           << " - torus    : -1*(x^2+y^2+z^2+6*6-2*2)^2+4*6*6*(x^2+y^2) " << endl
+           << " - rcube    : 6561-x^4-y^4-z^4" << endl
+           << " - goursat  : 8-0.03*x^4-0.03*y^4-0.03*z^4+2*x^2+2*y^2+2*z^2" << endl
+           << " - distel   : 10000-(x^2+y^2+z^2+1000*(x^2+y^2)*(x^2+z^2)*(y^2+z^2))" << endl
+           << " - leopold  : 100-(x^2*y^2*z^2+4*x^2+4*y^2+3*z^2)" << endl
+           << " - diabolo  : x^2-(y^2+z^2)^2" << endl
+           << " - heart    : -1*(x^2+2.25*y^2+z^2-1)^3+x^2*z^3+0.1125*y^2*z^3" << endl
+           << " - crixxi   : -0.9*(y^2+z^2-1)^2-(x^2+y^2-1)^3" << endl;
       return 0;
     }
   if ( ! vm.count( "polynomial" ) ) 
