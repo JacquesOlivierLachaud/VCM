@@ -47,14 +47,19 @@
 #include "DGtal/math/Statistic.h"
 #include "DGtal/math/MPolynomial.h"
 #include "DGtal/topology/LightImplicitDigitalSurface.h"
+#include "DGtal/graph/DepthFirstVisitor.h"
+#include "DGtal/graph/GraphVisitorRange.h"
 #include "DGtal/geometry/surfaces/estimation/CNormalVectorEstimator.h"
 #include "DGtal/geometry/surfaces/estimation/VoronoiCovarianceMeasureOnDigitalSurface.h"
 #include "DGtal/geometry/surfaces/estimation/VCMDigitalSurfaceLocalEstimator.h"
 #include "DGtal/geometry/surfaces/estimation/TrueDigitalSurfaceLocalEstimator.h"
+#include "DGtal/geometry/surfaces/estimation/IntegralInvariantNormalVectorEstimator.h"
 #include "DGtal/geometry/volumes/KanungoNoise.h"
 #include "DGtal/shapes/GaussDigitizer.h"
 #include "DGtal/shapes/ShapeGeometricFunctors.h"
 #include "DGtal/shapes/implicit/ImplicitPolynomial3Shape.h"
+#include "DGtal/images/ImageContainerBySTLVector.h"
+#include "DGtal/images/imagesSetsUtils/SimpleThresholdForegroundPredicate.h"
 #include "DGtal/io/readers/MPolynomialReader.h"
 #include "DGtal/io/colormaps/GradientColorMap.h"
 #ifdef WITH_VISU3D_QGLVIEWER
@@ -155,6 +160,25 @@ void computeEstimation
   typedef typename Surface::Surfel Surfel;
   typedef typename Estimator::Quantity Quantity;
   typedef double Scalar;
+  typedef DepthFirstVisitor< Surface > Visitor;
+  typedef GraphVisitorRange< Visitor > VisitorRange;
+  typedef typename VisitorRange::ConstIterator VisitorConstIterator;
+  
+  std::string fname = vm[ "output" ].as<std::string>();
+  string nameEstimator = vm[ "estimator" ].as<string>();
+  trace.beginBlock( "Computing " + nameEstimator + "estimations." );
+  CountedPtr<VisitorRange> range( new VisitorRange( new Visitor( surface, *(surface.begin()) )) );
+  std::vector<Quantity> n_estimations;
+  estimator.eval( range->begin(), range->end(), std::back_inserter( n_estimations ) );
+  trace.info() << "- nb estimations  = " << n_estimations.size() << std::endl;
+  trace.endBlock();
+
+  trace.beginBlock( "Computing ground truth." );
+  range = CountedPtr<VisitorRange>( new VisitorRange( new Visitor( surface, *(surface.begin()) )) );
+  std::vector<Quantity> n_true_estimations;
+  true_estimator.eval( range->begin(), range->end(), std::back_inserter( n_true_estimations ) );
+  trace.info() << "- nb estimations  = " << n_true_estimations.size() << std::endl;
+  trace.endBlock();
 
   DGtal::GradientColorMap<double> grad( 0.0, 40.0 );
   // 0 metallic blue, 5 light cyan, 10 light green, 15 light
@@ -169,8 +193,6 @@ void computeEstimation
   grad.addColor( DGtal::Color( 128,   0, 0   ) ); // 35
   grad.addColor( DGtal::Color( 128, 128, 128 ) ); // 40
 
-  std::string fname = vm[ "output" ].as<std::string>();
-  string nameEstimator = vm[ "estimator" ].as<string>();
   if ( vm.count( "angle-deviation-stats" ) )
     {
       trace.beginBlock( "Computing angle deviation error stats." );
@@ -178,10 +200,15 @@ void computeEstimation
       adev_sstr << fname << "-" << nameEstimator << "-angle-deviation-" 
                 << estimator.h() << ".txt"; 
       DGtal::Statistic<Scalar> adev_stat;
-      for ( ConstIterator it = surface.begin(), itE = surface.end(); it != itE; ++it )
+      unsigned int i = 0;
+      range = CountedPtr<VisitorRange>( new VisitorRange( new Visitor( surface, *(surface.begin()) )) );
+      for ( VisitorConstIterator it = range->begin(), itE = range->end(); it != itE; ++it, ++i )
+        // for ( ConstIterator it = surface.begin(), itE = surface.end(); it != itE; ++it )
         {
-          Quantity n_est = estimator.eval( it );
-          Quantity n_true_est = true_estimator.eval( it );
+          // Quantity n_est = estimator.eval( it );
+          // Quantity n_true_est = true_estimator.eval( it );
+          Quantity n_est = n_estimations[ i ];
+          Quantity n_true_est = n_true_estimations[ i ];
           Scalar angle_error = acos( n_est.dot( n_true_est ) );
           adev_stat.addValue( angle_error );
         }
@@ -211,10 +238,15 @@ void computeEstimation
                   << estimator.h() << ".txt"; 
       std::ofstream export_output( export_sstr.str().c_str() );
       bool adev =  vm[ "export" ].as<string>() == "AngleDeviation";
-      for ( ConstIterator it = surface.begin(), itE = surface.end(); it != itE; ++it )
+      unsigned int i = 0;
+      range = CountedPtr<VisitorRange>( new VisitorRange( new Visitor( surface, *(surface.begin()) )) );
+      for ( VisitorConstIterator it = range->begin(), itE = range->end(); it != itE; ++it, ++i )
+        // for ( ConstIterator it = surface.begin(), itE = surface.end(); it != itE; ++it )
         {
-          Quantity n_est = estimator.eval( it );
-          Quantity n_true_est = true_estimator.eval( it );
+          // Quantity n_est = estimator.eval( it );
+          // Quantity n_true_est = true_estimator.eval( it );
+          Quantity n_est = n_estimations[ i ];
+          Quantity n_true_est = n_true_estimations[ i ];
           Scalar angle_error = acos( n_est.dot( n_true_est ) )*180.0 / 3.14159625;
           Surfel s = *it;
           export_output
@@ -242,10 +274,15 @@ void computeEstimation
                   << estimator.h() << ".txt"; 
       std::ofstream export_output( export_sstr.str().c_str() );
       export_output << "# kx ky kz sign n_est[0] n_est[1] n_est[2] n_true[0] n_true[1] n_true[2]" << std::endl;
-      for ( ConstIterator it = surface.begin(), itE = surface.end(); it != itE; ++it )
+      unsigned int i = 0;
+      range = CountedPtr<VisitorRange>( new VisitorRange( new Visitor( surface, *(surface.begin()) )) );
+      for ( VisitorConstIterator it = range->begin(), itE = range->end(); it != itE; ++it, ++i )
+        // for ( ConstIterator it = surface.begin(), itE = surface.end(); it != itE; ++it )
         {
-          Quantity n_est = estimator.eval( it );
-          Quantity n_true_est = true_estimator.eval( it );
+          // Quantity n_est = estimator.eval( it );
+          // Quantity n_true_est = true_estimator.eval( it );
+          Quantity n_est = n_estimations[ i ];
+          Quantity n_true_est = n_true_estimations[ i ];
           Surfel s = *it;
           export_output
             << K.sKCoord( s, 0 ) << " " << K.sKCoord( s, 1 ) << " " << K.sKCoord( s, 2 ) 
@@ -285,16 +322,20 @@ void computeEstimation
       viewer << SetMode3D( s.className(), "Basic" );
       trace.beginBlock( "Viewing surface." );
       bool adev =  vm[ "view" ].as<string>() == "AngleDeviation";
-      for ( ConstIterator it = surface.begin(), itE = surface.end(); it != itE; ++it )
+
+      unsigned int i = 0;
+      range = CountedPtr<VisitorRange>( new VisitorRange( new Visitor( surface, *(surface.begin()) )) );
+      for ( VisitorConstIterator it = range->begin(), itE = range->end(); it != itE; ++it, ++i )
+        // for ( ConstIterator it = surface.begin(), itE = surface.end(); it != itE; ++it )
         {
-          Quantity n_est = estimator.eval( it );
-          Quantity n_true_est = true_estimator.eval( it );
+          Quantity n_est = n_estimations[ i ];
+          Quantity n_true_est = n_true_estimations[ i ];
           Scalar angle_error = acos( n_est.dot( n_true_est ) )*180.0 / 3.14159625;
           s = *it;
           Color c = grad( 0 );
           if ( adev ) c = grad( max( 0.0, min( angle_error, 40.0 ) ) );
           viewer.setFillColor( c );
-          MyDisplay3DFactory::drawSurfelWithNormal( viewer, K.unsigns( s ), n_est, true );
+          MyDisplay3DFactory::drawOrientedSurfelWithNormal( viewer, s, n_est, false );
         }
       trace.endBlock();
       viewer << MyViewever3D::updateDisplay;
@@ -307,13 +348,15 @@ void computeEstimation
 template <typename KSpace,
           typename ImplicitShape,
           typename Surface,
-          typename KernelFunction>
+          typename KernelFunction,
+          typename PointPredicate>
 void chooseEstimator
 ( const po::variables_map& vm,     //< command-line parameters
   const KSpace& K,                 //< cellular grid space
   const ImplicitShape& shape, //< implicit shape "ground truth"
   const Surface& surface,     //< digital surface approximating shape
-  const KernelFunction& chi ) //< the kernel function
+  const KernelFunction& chi,  //< the kernel function
+  const PointPredicate& ptPred )   //< analysed implicit digital shape as a PointPredicate
 {
   string nameEstimator = vm[ "estimator" ].as<string>();
   double h = vm["gridstep"].as<double>();
@@ -334,7 +377,7 @@ void chooseEstimator
       trace.endBlock();
       computeEstimation( vm, K, shape, surface, true_estimator, estimator );
     }
-  if ( nameEstimator == "VCM" )
+  else if ( nameEstimator == "VCM" )
     {
       trace.beginBlock( "Chosen estimator is: VCM." );
       typedef typename KSpace::Space Space;
@@ -354,6 +397,7 @@ void chooseEstimator
       double alpha = vm["alpha"].as<double>();
       if ( alpha != 0.0 ) R *= pow( h, alpha-1.0 );
       if ( alpha != 0.0 ) r *= pow( h, alpha-1.0 );
+      trace.info() << "- R=" << R << " r=" << r << " t=" << t << std::endl;
       VCMNormalEstimator estimator;
       estimator.attach( surface );
       estimator.setParams( embType, R, r, chi, t, Metric(), true );
@@ -361,17 +405,49 @@ void chooseEstimator
       trace.endBlock();
       computeEstimation( vm, K, shape, surface, true_estimator, estimator );
     }
+  else if ( nameEstimator == "II" )
+    {
+      trace.beginBlock( "Chosen estimator is: II." );
+      typedef typename KSpace::Space Space;
+      typedef HyperRectDomain<Space> Domain;
+      typedef ImageContainerBySTLVector< Domain, bool> Image;
+      typedef typename Domain::ConstIterator DomainConstIterator;
+      typedef SimpleThresholdForegroundPredicate<Image> ThresholdedImage;
+      typedef IntegralInvariantNormalVectorEstimator<KSpace, ThresholdedImage> IINormalEstimator;
+      double r = vm["r-radius"].as<double>();
+      double alpha = vm["alpha"].as<double>();
+      if ( alpha != 0.0 ) r *= pow( h, alpha-1.0 );
+      trace.info() << " r=" << r << std::endl;
+      trace.beginBlock( "Preparing characteristic set." );
+      Domain domain( K.lowerBound(), K.upperBound() );
+      Image image( domain );
+      for ( DomainConstIterator it = domain.begin(), itE = domain.end(); it != itE; ++it )
+        {
+          image.setValue( *it, ptPred( *it ) );
+        }
+      trace.endBlock();
+      trace.beginBlock( "Initialize II estimator." );
+      ThresholdedImage thresholdedImage( image, false );
+      IINormalEstimator ii_estimator( K, thresholdedImage );
+      ii_estimator.setParams( r );
+      ii_estimator.init( h, surface.begin(), surface.end() );
+      trace.endBlock();
+      trace.endBlock();
+      computeEstimation( vm, K, shape, surface, true_estimator, ii_estimator );
+   }
 
 }
 
 template <typename KSpace,
           typename ImplicitShape,
-          typename Surface>
+          typename Surface,
+          typename PointPredicate>
 void chooseKernel
 ( const po::variables_map& vm,     //< command-line parameters
   const KSpace& K,                 //< cellular grid space
   const ImplicitShape& shape,      //< implicit shape "ground truth"
-  const Surface& surface )         //< digital surface approximating shape
+  const Surface& surface,          //< digital surface approximating shape
+  const PointPredicate& ptPred )   //< analysed implicit digital shape as a PointPredicate
 {
   string kernel = vm[ "kernel" ].as<string>();
   double h = vm["gridstep"].as<double>();
@@ -382,12 +458,12 @@ void chooseKernel
     typedef typename KSpace::Point Point;
     typedef HatPointFunction<Point,double> KernelFunction;
     KernelFunction chi_r( 1.0, r );
-    chooseEstimator( vm, K, shape, surface, chi_r );
+    chooseEstimator( vm, K, shape, surface, chi_r, ptPred );
   } else if ( kernel == "ball" ) {
     typedef typename KSpace::Point Point;
     typedef BallConstantPointFunction<Point,double> KernelFunction;
     KernelFunction chi_r( 1.0, r );
-    chooseEstimator( vm, K, shape, surface, chi_r );
+    chooseEstimator( vm, K, shape, surface, chi_r, ptPred );
   }
 }
 
@@ -421,7 +497,7 @@ int chooseSurface
       CountedPtr<Surface> ptrSurface( new Surface( surfaceContainer ) ); // acquired
       trace.info() << "- surface component has " << ptrSurface->size() << " surfels." << std::endl; 
       trace.endBlock();
-      chooseKernel( vm, K, shape, *ptrSurface );
+      chooseKernel( vm, K, shape, *ptrSurface, dshape );
     }
   else
     { // noise
@@ -457,7 +533,7 @@ int chooseSurface
         }
       trace.info() << "- surface component has " << nb_surfels << " surfels." << std::endl; 
       trace.endBlock();
-      chooseKernel( vm, K, shape, *ptrSurface );
+      chooseKernel( vm, K, shape, *ptrSurface, *noisified_dshape );
     }
   return 0;
 }
