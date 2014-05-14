@@ -53,7 +53,8 @@
 #include "DGtal/geometry/surfaces/estimation/VoronoiCovarianceMeasureOnDigitalSurface.h"
 #include "DGtal/geometry/surfaces/estimation/VCMDigitalSurfaceLocalEstimator.h"
 #include "DGtal/geometry/surfaces/estimation/TrueDigitalSurfaceLocalEstimator.h"
-#include "DGtal/geometry/surfaces/estimation/IntegralInvariantNormalVectorEstimator.h"
+#include "DGtal/geometry/surfaces/estimation/IIGeometricFunctors.h"
+#include "DGtal/geometry/surfaces/estimation/IntegralInvariantEstimator.h"
 #include "DGtal/geometry/volumes/KanungoNoise.h"
 #include "DGtal/shapes/GaussDigitizer.h"
 #include "DGtal/shapes/ShapeGeometricFunctors.h"
@@ -421,7 +422,8 @@ void chooseEstimator
       typedef ImageContainerBySTLVector< Domain, bool> Image;
       typedef typename Domain::ConstIterator DomainConstIterator;
       typedef SimpleThresholdForegroundPredicate<Image> ThresholdedImage;
-      typedef IntegralInvariantNormalVectorEstimator<KSpace, ThresholdedImage> IINormalEstimator;
+      typedef IIGeometricFunctors::IINormalDirectionFunctor<Space> IINormalFunctor;
+      typedef IntegralInvariantEstimator<KSpace, ThresholdedImage, IINormalFunctor> IINormalEstimator;
       double r = vm["r-radius"].as<double>();
       double alpha = vm["alpha"].as<double>();
       if ( alpha != 0.0 ) r *= pow( h, alpha-1.0 );
