@@ -180,6 +180,13 @@ void computeEstimation
   trace.info() << "- nb estimations  = " << n_true_estimations.size() << std::endl;
   trace.endBlock();
 
+  trace.beginBlock( "Correcting orientations." );
+  ASSERT( n_estimations.size() == n_true_estimations.size() );
+  for ( unsigned int i = 0; i < n_estimations.size(); ++i )
+    if ( n_estimations[ i ].dot( n_true_estimations[ i ] ) < 0 )
+      n_estimations[ i ] = -n_estimations[ i ];
+  trace.endBlock();
+
   DGtal::GradientColorMap<double> grad( 0.0, 40.0 );
   // 0 metallic blue, 5 light cyan, 10 light green, 15 light
   // yellow, 20 yellow, 25 orange, 30 red, 35, dark red, 40- grey
@@ -203,10 +210,7 @@ void computeEstimation
       unsigned int i = 0;
       range = CountedPtr<VisitorRange>( new VisitorRange( new Visitor( surface, *(surface.begin()) )) );
       for ( VisitorConstIterator it = range->begin(), itE = range->end(); it != itE; ++it, ++i )
-        // for ( ConstIterator it = surface.begin(), itE = surface.end(); it != itE; ++it )
         {
-          // Quantity n_est = estimator.eval( it );
-          // Quantity n_true_est = true_estimator.eval( it );
           Quantity n_est = n_estimations[ i ];
           Quantity n_true_est = n_true_estimations[ i ];
           Scalar angle_error = acos( n_est.dot( n_true_est ) );
@@ -241,10 +245,7 @@ void computeEstimation
       unsigned int i = 0;
       range = CountedPtr<VisitorRange>( new VisitorRange( new Visitor( surface, *(surface.begin()) )) );
       for ( VisitorConstIterator it = range->begin(), itE = range->end(); it != itE; ++it, ++i )
-        // for ( ConstIterator it = surface.begin(), itE = surface.end(); it != itE; ++it )
         {
-          // Quantity n_est = estimator.eval( it );
-          // Quantity n_true_est = true_estimator.eval( it );
           Quantity n_est = n_estimations[ i ];
           Quantity n_true_est = n_true_estimations[ i ];
           Scalar angle_error = acos( n_est.dot( n_true_est ) )*180.0 / 3.14159625;
@@ -277,10 +278,7 @@ void computeEstimation
       unsigned int i = 0;
       range = CountedPtr<VisitorRange>( new VisitorRange( new Visitor( surface, *(surface.begin()) )) );
       for ( VisitorConstIterator it = range->begin(), itE = range->end(); it != itE; ++it, ++i )
-        // for ( ConstIterator it = surface.begin(), itE = surface.end(); it != itE; ++it )
         {
-          // Quantity n_est = estimator.eval( it );
-          // Quantity n_true_est = true_estimator.eval( it );
           Quantity n_est = n_estimations[ i ];
           Quantity n_true_est = n_true_estimations[ i ];
           Surfel s = *it;
@@ -301,7 +299,18 @@ void computeEstimation
       export_sstr << fname << "-" << nameEstimator << "-noff-" 
                   << estimator.h() << ".off"; 
       std::ofstream export_output( export_sstr.str().c_str() );
-      exportNOFFSurface( surface, estimator, export_output );
+      std::map<Surfel,Quantity> normals;
+      unsigned int i = 0;
+      range = CountedPtr<VisitorRange>( new VisitorRange( new Visitor( surface, *(surface.begin()) )) );
+      for ( VisitorConstIterator it = range->begin(), itE = range->end(); it != itE; ++it, ++i )
+        {
+          Quantity n_est = n_estimations[ i ];
+          normals[ *it ] = n_est;
+        }
+      CanonicSCellEmbedder<KSpace> surfelEmbedder( K );
+      typedef SCellEmbedderWithNormal< CanonicSCellEmbedder<KSpace> > Embedder;
+      Embedder embedder( surfelEmbedder, normals );
+      surface.exportAs3DNOFF( export_output, embedder );
       export_output.close();
       trace.endBlock();
     }
@@ -326,7 +335,6 @@ void computeEstimation
       unsigned int i = 0;
       range = CountedPtr<VisitorRange>( new VisitorRange( new Visitor( surface, *(surface.begin()) )) );
       for ( VisitorConstIterator it = range->begin(), itE = range->end(); it != itE; ++it, ++i )
-        // for ( ConstIterator it = surface.begin(), itE = surface.end(); it != itE; ++it )
         {
           Quantity n_est = n_estimations[ i ];
           Quantity n_true_est = n_true_estimations[ i ];
@@ -552,15 +560,15 @@ int main( int argc, char** argv )
     ("minAABB,a",  po::value<double>()->default_value( -10.0 ), "the min value of the AABB bounding box (domain)" )
     ("maxAABB,A",  po::value<double>()->default_value( 10.0 ), "the max value of the AABB bounding box (domain)" )
     ("gridstep,g", po::value< double >()->default_value( 1.0 ), "the gridstep that defines the digitization (often called h). " )
-    ("estimator,e", po::value<string>()->default_value( "True" ), "the chosen normal estimator: True | VCM | Trivial" )
+    ("estimator,e", po::value<string>()->default_value( "True" ), "the chosen normal estimator: True | VCM | II | Trivial" )
     ("R-radius,R", po::value<double>()->default_value( 5 ), "the constant for parameter R in R(h)=R h^alpha (VCM)." )
-    ("r-radius,r", po::value<double>()->default_value( 3 ), "the constant for parameter r in r(h)=r h^alpha (VCM,Trivial)." )
+    ("r-radius,r", po::value<double>()->default_value( 3 ), "the constant for parameter r in r(h)=r h^alpha (VCM,II,Trivial)." )
     ("kernel,k", po::value<string>()->default_value( "hat" ), "the function chi_r, either hat or ball." )
     ("alpha", po::value<double>()->default_value( 0.0 ), "the parameter alpha in r(h)=r h^alpha (VCM)." )
-    ("trivial-radius,t", po::value<double>()->default_value( 3 ), "the parameter t for reorienting the VCM." )
-    ("embedding,E", po::value<int>()->default_value( 0 ), "the surfel -> point embedding: 0: Pointels, 1: InnerSpel, 2: OuterSpel." )
-    ("output,o", po::value<string>(), "the output basename." )
-    ("angle-deviation-stats,S", "computes angle deviation error the output basename." )
+    ("trivial-radius,t", po::value<double>()->default_value( 3 ), "the parameter t defining the radius for the Trivial estimator. Also used for reorienting the VCM." )
+    ("embedding,E", po::value<int>()->default_value( 0 ), "the surfel -> point embedding for VCM estimator: 0: Pointels, 1: InnerSpel, 2: OuterSpel." )
+    ("output,o", po::value<string>()->default_value( "output" ), "the output basename." )
+    ("angle-deviation-stats,S", "computes angle deviation error and outputs them in file specified by -O." )
     ("export,x", po::value<string>()->default_value( "None" ), "exports surfel normals which can be viewed with viewSetOfSurfels. <arg> in None|Normals|AngleDeviation. The color depends on the angle deviation in degree: 0 metallic blue, 5 light cyan, 10 light green, 15 light yellow, 20 yellow, 25 orange, 30 red, 35, dark red, 40- grey" )
     ("normals,n", "outputs every surfel, its estimated normal, and the ground truth normal." )
     ("noff,O","exports the digital surface with normals as NOFF file." )
@@ -577,10 +585,10 @@ int main( int argc, char** argv )
     trace.info()<< "Error checking program options: "<< ex.what()<< endl;
   }
   po::notify(vm);    
-  if( !parseOK || vm.count("help"))
+  if( !parseOK || vm.count("help") )
     {
-      cout << "Usage: " << argv[0] << " -p \"90-x^2-y^2-z^2\" -h 1 -R 5 -r 6 -t 2\n"
-		<< "Computes a 3D normal vector field for several estimators, output it and compute some statistics." 
+      cout << "Usage: " << argv[0] << " -p <polynomial> [options]\n"
+		<< "Computes a 3D normal vector field over a digitized implicit surface for several estimators (II|VCM|Trivial|True), specified with -e. You may add Kanungo noise with option -N. These estimators are compared with ground truth. You may then: 1) visualize the normals or the angle deviations with -V (if WITH_QGL_VIEWER is enabled), 2) outputs them as a list of cells/estimations with -n, 3) outputs them as a ImaGene file with -O, 4) outputs them as a NOFF file with -O, 5) computes estimation statistics with option -S." 
                 << endl
 		<< general_opt << "\n";
       cout << "Example:\n"
@@ -593,12 +601,15 @@ int main( int argc, char** argv )
            << " - leopold  : 100-(x^2*y^2*z^2+4*x^2+4*y^2+3*z^2)" << endl
            << " - diabolo  : x^2-(y^2+z^2)^2" << endl
            << " - heart    : -1*(x^2+2.25*y^2+z^2-1)^3+x^2*z^3+0.1125*y^2*z^3" << endl
-           << " - crixxi   : -0.9*(y^2+z^2-1)^2-(x^2+y^2-1)^3" << endl;
+           << " - crixxi   : -0.9*(y^2+z^2-1)^2-(x^2+y^2-1)^3" << endl << endl;
+      cout << "Note:" << endl
+           << "     - This is a normal *direction* evaluator more than a normal vector evaluator. Orientations of normals are deduced from ground truth. This is due to the fact that II and VCM only estimates normal directions." << endl
+           << "     - This tool only analyses one surface component, and one that contains at least as many surfels as the width of the digital bounding box. This is required when analysing noisy data, where a lot of the small components are spurious. The drawback is that you cannot analyse the normals on a surface with several components." << endl;
       return 0;
     }
   if ( ! vm.count( "polynomial" ) ) 
     {
-      cerr << "Need parameter --polynomial" << endl;
+      cerr << "Need parameter --polynomial / -p" << endl;
       return 1;
     }
 
