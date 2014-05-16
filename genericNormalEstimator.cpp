@@ -569,13 +569,13 @@ int main( int argc, char** argv )
     ("alpha", po::value<double>()->default_value( 0.0 ), "the parameter alpha in r(h)=r h^alpha (VCM)." )
     ("trivial-radius,t", po::value<double>()->default_value( 3 ), "the parameter t defining the radius for the Trivial estimator. Also used for reorienting the VCM." )
     ("embedding,E", po::value<int>()->default_value( 0 ), "the surfel -> point embedding for VCM estimator: 0: Pointels, 1: InnerSpel, 2: OuterSpel." )
-    ("output,o", po::value<string>()->default_value( "output" ), "the output basename." )
-    ("angle-deviation-stats,S", "computes angle deviation error and outputs them in file specified by -O." )
-    ("export,x", po::value<string>()->default_value( "None" ), "exports surfel normals which can be viewed with viewSetOfSurfels. <arg> in None|Normals|AngleDeviation. The color depends on the angle deviation in degree: 0 metallic blue, 5 light cyan, 10 light green, 15 light yellow, 20 yellow, 25 orange, 30 red, 35, dark red, 40- grey" )
-    ("normals,n", "outputs every surfel, its estimated normal, and the ground truth normal." )
-    ("noff,O","exports the digital surface with normals as NOFF file." )
+    ("output,o", po::value<string>()->default_value( "output" ), "the output basename. All generated files will have the form <arg>-*, for instance <arg>-angle-deviation-<gridstep>.txt, <arg>-normals-<gridstep>.txt, <arg>-cells-<gridstep>.txt, <arg>-noff-<gridstep>.off." )
+    ("angle-deviation-stats,S", "computes angle deviation error and outputs them in file <basename>-angle-deviation-<gridstep>.txt, as specified by -o <basename>." )
+    ("export,x", po::value<string>()->default_value( "None" ), "exports surfel normals which can be viewed with ImaGene tool 'viewSetOfSurfels' in file <basename>-cells-<gridstep>.txt, as specified by -o <basename>. Parameter <arg> is None|Normals|AngleDeviation. The color depends on the angle deviation in degree: 0 metallic blue, 5 light cyan, 10 light green, 15 light yellow, 20 yellow, 25 orange, 30 red, 35, dark red, 40- grey" )
+    ("normals,n", "outputs every surfel, its estimated normal, and the ground truth normal in file <basename>-normals-<gridstep>.txt, as specified by -o <basename>." )
+    ("noff,O","exports the digital surface with normals as NOFF file <basename>-noff-<gridstep>.off, as specified by -o <basename>.." )
 #ifdef WITH_VISU3D_QGLVIEWER
-    ("view,V", po::value<string>()->default_value( "None" ),"view the digital surface with normals.  <arg> in None|Normals|AngleDeviation. The color depends on the angle deviation in degree: 0 metallic blue, 5 light cyan, 10 light green, 15 light yellow, 20 yellow, 25 orange, 30 red, 35, dark red, 40- grey." )
+    ("view,V", po::value<string>()->default_value( "None" ),"view the digital surface with normals.  Parameter <arg> is None|Normals|AngleDeviation. The color depends on the angle deviation in degree: 0 metallic blue, 5 light cyan, 10 light green, 15 light yellow, 20 yellow, 25 orange, 30 red, 35, dark red, 40- grey." )
 #endif
     ;  
   bool parseOK=true;
@@ -604,6 +604,12 @@ int main( int argc, char** argv )
            << " - diabolo  : x^2-(y^2+z^2)^2" << endl
            << " - heart    : -1*(x^2+2.25*y^2+z^2-1)^3+x^2*z^3+0.1125*y^2*z^3" << endl
            << " - crixxi   : -0.9*(y^2+z^2-1)^2-(x^2+y^2-1)^3" << endl << endl;
+      cout << "Estimators (specified by -e):" << endl
+           << " - True     : supposed to be the ground truth for computations. Of course, it is only approximations." << endl
+           << " - VCM      : normal estimator by digital Voronoi Covariance Matrix. Radii parameters are given by -R, -r." << endl
+           << " - II       : normal estimator by Integral Invariants. Radius parameter is given by -r." << endl
+           << " - Trivial  : the normal obtained by average trivial surfel normals in a ball neighborhood. Radius parameter is given by -r." << endl
+           << endl;
       cout << "Note:" << endl
            << "     - This is a normal *direction* evaluator more than a normal vector evaluator. Orientations of normals are deduced from ground truth. This is due to the fact that II and VCM only estimates normal directions." << endl
            << "     - This tool only analyses one surface component, and one that contains at least as many surfels as the width of the digital bounding box. This is required when analysing noisy data, where a lot of the small components are spurious. The drawback is that you cannot analyse the normals on a surface with several components." << endl;
