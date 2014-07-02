@@ -63,7 +63,8 @@ SET(VCM_QGL_SRC
   dvcm-features-3d
   implicitShape3NormalEstimation
   noisyImplicitShape3NormalEstimation
-  genericNormalEstimator
+#  genericNormalEstimator
+  angle-viewer
   )
 
 #add_definitions( -DWITH_EIGEN=YES )
