@@ -68,7 +68,7 @@ int main( int argc, char** argv )
   general_opt.add_options()
     ("help,h", "display this message")
     ("polynomial,p", po::value<string>(), "the implicit polynomial whose zero-level defines the shape of interest." )
-    ("reach,R",  po::value<double>()->default_value( 1.0 ), "the reach of the shape." )
+    ("reach,R",  po::value<double>(), "the reach of the shape." )
     ("minAABB,a",  po::value<double>()->default_value( -10.0 ), "the min value of the AABB bounding box (domain)" )
     ("maxAABB,A",  po::value<double>()->default_value( 10.0 ), "the max value of the AABB bounding box (domain)" )
     ("gridstep,g", po::value< double >()->default_value( 1.0 ), "the gridstep that defines the digitization (often called h). " );
@@ -98,7 +98,10 @@ int main( int argc, char** argv )
            << " - leopold  : 100-(x^2*y^2*z^2+4*x^2+4*y^2+3*z^2)" << endl
            << " - diabolo  : x^2-(y^2+z^2)^2" << endl
            << " - heart    : -1*(x^2+2.25*y^2+z^2-1)^3+x^2*z^3+0.1125*y^2*z^3" << endl
-           << " - crixxi   : -0.9*(y^2+z^2-1)^2-(x^2+y^2-1)^3" << endl;
+           << " - crixxi   : -0.9*(y^2+z^2-1)^2-(x^2+y^2-1)^3" << endl
+           << " - goursat_dodecahedron: z^6-5*(x^2+y^2)*z^4+5*(x^2+y^2)^2*z^2-2*(x^4-10*x^2*y^2+5*y^4)*x*z+1*(x^2+y^2+z^2)^3+(-1)*(5)^2*(x^2+y^2+z^2)^2+1*(5)^4*(x^2+y^2+z^2)+(-1)*(5)^6" << endl
+           << " - goursat_icosahedron : z^6-5*(x^2+y^2)*z^4+5*(x^2+y^2)^2*z^2-2*(x^4-10*x^2*y^2+5*y^4)*x*z+(-1)*(x^2+y^2+z^2)^3+(0)*(5)^2*(x^2+y^2+z^2)^2+(-1)*(5)^4*(x^2+y^2+z^2)+(1)*(5)^6" << endl
+           << " - goursat_60lines : z^6-5*(x^2+y^2)*z^4+5*(x^2+y^2)^2*z^2-2*(x^4-10*x^2*y^2+5*y^4)*x*z+(0)*(x^2+y^2+z^2)^3+(5)*(5)^2*(x^2+y^2+z^2)^2+(-45)*(5)^4*(x^2+y^2+z^2)+(71)*(5)^6" << endl;
       return 0;
     }
   if ( ! vm.count( "polynomial" ) ) 
@@ -189,6 +192,7 @@ int main( int argc, char** argv )
       mc = std::max( abs( c ), mc ); 
     }
   double R = 1.0 / mc;
+  if ( vm.count( "reach" ) ) R = vm[ "reach" ].as<double>();
   typedef Viewer3D<Space,KSpace> MyViewer3D;
   typedef Display3DFactory<Space,KSpace> MyDisplay3DFactory;
   MyViewer3D viewer( K );
@@ -197,13 +201,17 @@ int main( int argc, char** argv )
   double s_manifold = h / (0.794*R);
   double s_homeo_xi = h*2.0*sqrt(3)/R;
   trace.info() << "Estimated reach    = " << (1.0/mc) << std::endl;
+  trace.info() << "Chosen reach       = " << R << std::endl;
   trace.info() << "Threshold manifold = " << s_manifold << std::endl;
   trace.info() << "Threshold homeo xi = " << s_homeo_xi << std::endl;
 
+  double areas[ 4 ] = { 0.0, 0.0, 0.0, 0.0 };
   for ( ConstIterator it = ptrSurface->begin(), itE= ptrSurface->end(); it != itE; ++it )
     {
-      NQuantity n = normal_estimator.eval( it );
       viewer.setFillColor( Color::White );
+      Dimension k    = K.sOrthDir( *it );
+      NQuantity n    = normal_estimator.eval( it );
+      double area    = abs( n[ k ] );
       double angle_x = acos( abs( n[0] ) );
       double angle_y = acos( abs( n[1] ) );
       double angle_z = acos( abs( n[2] ) );
@@ -215,11 +223,22 @@ int main( int argc, char** argv )
                               && ( abs( n[ 2 ] ) > s_homeo_xi ) );
       int color = ( non_manifold ? 2 : 0 ) + ( non_homeo_xi ? 1 : 0 );
       if ( color == 0 )      viewer.setFillColor( Color::White );
-      else if ( color == 1 ) viewer.setFillColor( Color::Green );
+      else if ( color == 1 ) viewer.setFillColor( Color( 160, 160, 180 ) );
       else if ( color == 2 ) viewer.setFillColor( Color::Yellow );
-      else if ( color == 3 ) viewer.setFillColor( Color::Red );
+      else if ( color == 3 ) viewer.setFillColor( Color( 60, 60, 80 ) );
+      areas[ 0 ] += area;
+      areas[ 1 ] += color == 1 ? area : 0.0;
+      areas[ 2 ] += color == 2 ? area : 0.0;
+      areas[ 3 ] += color == 3 ? area : 0.0;
+      // for ( int i = 0; i <= color; ++i ) areas[ i ] += area;
       MyDisplay3DFactory::drawOrientedSurfelWithNormal( viewer, *it, n, false );
     }
+  for ( int i = 0; i < 4; ++i ) areas[ i ] *= h*h;
+  std::cout << setprecision( 12 );
+  trace.info() << "Area              = " << setprecision( 12 ) << areas[ 0 ] << " " << "100.0 %" << std::endl;
+  trace.info() << "Area Non-Homeo-Xi = " << setprecision( 12 ) << areas[ 1 ] << " " << (100.0*areas[1]/areas[0]) << " %" << std::endl;
+  trace.info() << "Area Non-Manifold = " << setprecision( 12 ) << areas[ 2 ] << " " << (100.0*areas[2]/areas[0]) << " %" << std::endl;
+  trace.info() << "Area NM + NHXi    = " << setprecision( 12 ) << areas[ 3 ] << " " << (100.0*areas[3]/areas[0]) << " %" << std::endl;
   viewer << MyViewer3D::updateDisplay;
   application.exec();
  
