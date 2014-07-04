@@ -65,6 +65,7 @@ SET(VCM_QGL_SRC
   noisyImplicitShape3NormalEstimation
   generic3dNormalEstimators
   angle-viewer
+  area-integration
   )
 
 #add_definitions( -DWITH_EIGEN=YES )
