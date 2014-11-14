@@ -37,15 +37,14 @@
 #include "DGtal/base/BasicFunctors.h"
 #include "DGtal/helpers/StdDefs.h"
 #include "DGtal/kernel/BasicPointPredicates.h"
-#include "DGtal/kernel/SimpleMatrix.h"
 #include "DGtal/topology/helpers/Surfaces.h"
 #include "DGtal/topology/DigitalSurface.h"
 #include "DGtal/topology/SetOfSurfels.h"
 #include "DGtal/topology/ImplicitDigitalSurface.h"
-#include "DGtal/math/EigenValues3D.h"
+#include "DGtal/math/linalg/EigenDecomposition.h"
 #include "DGtal/images/ImageContainerBySTLVector.h"
 #include "DGtal/images/ImageSelector.h"
-#include "DGtal/images/imagesSetsUtils/IntervalForegroundPredicate.h"
+#include "DGtal/images/IntervalForegroundPredicate.h"
 #include "DGtal/geometry/volumes/distance/ExactPredicateLpSeparableMetric.h"
 #include "DGtal/geometry/volumes/distance/VoronoiMap.h"
 #include "DGtal/geometry/volumes/distance/DistanceTransformation.h"
@@ -70,9 +69,9 @@ typedef DGtal::Z3i::RealVector RealVector;
 typedef DGtal::HyperRectDomain<Space> Domain;
 typedef DGtal::ImageContainerBySTLVector<Domain,bool> CharacteristicSet;
 typedef DGtal::ExactPredicateLpSeparableMetric<Space, 2> Metric; // L2-metric
-typedef DGtal::EigenValues3D<double> LinearAlgebraTool;
-typedef LinearAlgebraTool::Matrix33 Matrix33;
-typedef LinearAlgebraTool::Vector3 Vector3;
+typedef DGtal::EigenDecomposition<3,double> LinearAlgebraTool;
+typedef LinearAlgebraTool::Matrix Matrix33;
+typedef LinearAlgebraTool::Vector Vector3;
 typedef KSpace::Surfel Surfel;
 typedef KSpace::SCell SCell;
 
@@ -319,7 +318,7 @@ void computeSurfaceVCM( std::ostream& output_vcm,
                         double trivial_r, int embedding )
 {
   typedef typename Surface::DigitalSurfaceContainer DigitalSurfaceContainer;
-  BOOST_CONCEPT_ASSERT(( CDigitalSurfaceContainer<DigitalSurfaceContainer> ));
+  BOOST_CONCEPT_ASSERT(( concepts::CDigitalSurfaceContainer<DigitalSurfaceContainer> ));
   typedef typename Surface::KSpace KSpace; 
   typedef typename Surface::Surfel Surfel;
   typedef typename KSpace::Space Space;
@@ -330,7 +329,7 @@ void computeSurfaceVCM( std::ostream& output_vcm,
   typedef typename Space::RealPoint RealPoint;
   typedef typename Space::RealVector RealVector;
   typedef typename Surface::ConstIterator SurfelConstIterator;
-  typedef HatPointFunction<Point,double> KernelFunction;
+  typedef functors::HatPointFunction<Point,double> KernelFunction;
   typedef VoronoiCovarianceMeasureOnDigitalSurface< DigitalSurfaceContainer, Metric,
                                                     KernelFunction > VCMOnSurface;
   typedef typename VCMOnSurface::VectorN VectorN;
@@ -444,7 +443,7 @@ int main( int argc, char** argv )
       int thresholdMax = vm["thresholdMax"].as<int>();
       Image image = GenericReader<Image>::import (inputFilename );
       Domain domain = image.domain();
-      typedef IntervalForegroundPredicate<Image> ThresholdedImage;
+      typedef functors::IntervalForegroundPredicate<Image> ThresholdedImage;
       ThresholdedImage thresholdedImage( image, thresholdMin, thresholdMax );
       trace.endBlock();
       trace.beginBlock( "Extracting boundary by scanning the space. " );
@@ -632,7 +631,7 @@ int main( int argc, char** argv )
   Pt2EigenVCM pt2eigen_vcm;
   int pts_size = vectPoints.size();
   int i = 0;
-  HatPointFunction< Point, double > chi_r( r, r );
+  functors::HatPointFunction< Point, double > chi_r( r, r );
   for ( std::vector<Point>::const_iterator it = vectPoints.begin(), itE = vectPoints.end();
         it != itE; ++it )
     {

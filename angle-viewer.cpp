@@ -153,7 +153,7 @@ int main( int argc, char** argv )
   typedef LightImplicitDigitalSurface<KSpace,ImplicitDigitalShape> SurfaceContainer;
   typedef DigitalSurface< SurfaceContainer > Surface;
   typedef Surface::ConstIterator ConstIterator;
-  typedef typename Surface::Surfel Surfel;
+  typedef Surface::Surfel Surfel;
   SurfelAdjacency< KSpace::dimension > surfAdj( true );
   Surfel bel;
   try {

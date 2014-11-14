@@ -301,10 +301,10 @@ int main( int argc, char** argv )
       r = r * pow( h, alpha-1.0 );
       std::string kernel = vm[ "kernel" ].as<std::string>();
       if ( kernel == "hat" ) {
-        typedef HatPointFunction<Point,double> KernelFunction;
+        typedef functors::HatPointFunction<Point,double> KernelFunction;
         typedef VoronoiCovarianceMeasureOnDigitalSurface<SurfaceContainer,Metric,
                                                          KernelFunction> VCMOnSurface;
-        typedef VCMGeometricFunctors::VCMNormalVectorFunctor<VCMOnSurface> NormalFunctor;
+        typedef functors::VCMNormalVectorFunctor<VCMOnSurface> NormalFunctor;
         typedef VCMDigitalSurfaceLocalEstimator<SurfaceContainer,Metric,
                                                 KernelFunction, NormalFunctor> VCMNormalEstimator;
         trace.beginBlock("Computing VCM on surface." );
@@ -328,10 +328,10 @@ int main( int argc, char** argv )
           exportNOFFSurface( *ptrSurface, estimator, noff_output );
         trace.endBlock();
       } else if ( kernel == "ball" ) {
-        typedef BallConstantPointFunction<Point,double> KernelFunction;
+        typedef functors::BallConstantPointFunction<Point,double> KernelFunction;
         typedef VoronoiCovarianceMeasureOnDigitalSurface<SurfaceContainer,Metric,
                                                          KernelFunction> VCMOnSurface;
-        typedef VCMGeometricFunctors::VCMNormalVectorFunctor<VCMOnSurface> NormalFunctor;
+        typedef functors::VCMNormalVectorFunctor<VCMOnSurface> NormalFunctor;
         typedef VCMDigitalSurfaceLocalEstimator<SurfaceContainer,Metric,
                                                 KernelFunction, NormalFunctor> VCMNormalEstimator;
         trace.beginBlock("Computing VCM on surface." );

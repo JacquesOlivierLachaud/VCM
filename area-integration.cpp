@@ -41,7 +41,7 @@
 #include "DGtal/base/CountedPtr.h"
 #include "DGtal/base/CountedConstPtrOrConstPtr.h"
 #include "DGtal/helpers/StdDefs.h"
-#include "DGtal/images/imagesSetsUtils/SimpleThresholdForegroundPredicate.h"
+#include "DGtal/images/SimpleThresholdForegroundPredicate.h"
 #include "DGtal/math/Statistic.h"
 #include "DGtal/math/MPolynomial.h"
 #include "DGtal/topology/DigitalSurface.h"
@@ -135,6 +135,7 @@ void chooseEstimator
   const KernelFunction& chi,  //< the kernel function
   const PointPredicate& ptPred )   //< analysed implicit digital shape as a PointPredicate
 {
+  using namespace DGtal::functors;
   string nameEstimator = vm[ "estimator" ].as<string>();
   double h = vm["gridstep"].as<double>();
   typedef ShapeGeometricFunctors::ShapeNormalVectorFunctor<ImplicitShape> NormalFunctor;
@@ -165,7 +166,7 @@ void chooseEstimator
       typedef ExactPredicateLpSeparableMetric<Space,2> Metric;
       typedef VoronoiCovarianceMeasureOnDigitalSurface<SurfaceContainer,Metric,
                                                        KernelFunction> VCMOnSurface;
-      typedef VCMGeometricFunctors::VCMNormalVectorFunctor<VCMOnSurface> NormalFunctor;
+      typedef VCMNormalVectorFunctor<VCMOnSurface> NormalFunctor;
       typedef VCMDigitalSurfaceLocalEstimator<SurfaceContainer,Metric,
                                               KernelFunction, NormalFunctor> VCMNormalEstimator;
       int embedding = vm["embedding"].as<int>();
@@ -193,7 +194,7 @@ void chooseEstimator
       typedef ImageContainerBySTLVector< Domain, bool> Image;
       typedef typename Domain::ConstIterator DomainConstIterator;
       typedef SimpleThresholdForegroundPredicate<Image> ThresholdedImage;
-      typedef IIGeometricFunctors::IINormalDirectionFunctor<Space> IINormalFunctor;
+      typedef IINormalDirectionFunctor<Space> IINormalFunctor;
       typedef IntegralInvariantCovarianceEstimator<KSpace, ThresholdedImage, IINormalFunctor> IINormalEstimator;
       double r = vm["r-radius"].as<double>();
       double alpha = vm["alpha"].as<double>();
@@ -247,6 +248,7 @@ int main( int argc, char** argv )
   QApplication application(argc,argv);
 
   // parse command line ----------------------------------------------
+  using namespace DGtal::functors;
   namespace po = boost::program_options;
   po::options_description general_opt("Allowed options are: ");
   general_opt.add_options()

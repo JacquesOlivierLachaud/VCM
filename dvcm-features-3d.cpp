@@ -37,15 +37,14 @@
 #include "DGtal/base/BasicFunctors.h"
 #include "DGtal/helpers/StdDefs.h"
 #include "DGtal/kernel/BasicPointPredicates.h"
-#include "DGtal/kernel/SimpleMatrix.h"
 #include "DGtal/topology/helpers/Surfaces.h"
 #include "DGtal/topology/DigitalSurface.h"
 #include "DGtal/topology/SetOfSurfels.h"
 #include "DGtal/topology/ImplicitDigitalSurface.h"
-#include "DGtal/math/EigenValues3D.h"
+#include "DGtal/math/linalg/EigenDecomposition.h"
 #include "DGtal/images/ImageContainerBySTLVector.h"
 #include "DGtal/images/ImageSelector.h"
-#include "DGtal/images/imagesSetsUtils/IntervalForegroundPredicate.h"
+#include "DGtal/images/IntervalForegroundPredicate.h"
 #include "DGtal/geometry/volumes/distance/ExactPredicateLpSeparableMetric.h"
 #include "DGtal/geometry/volumes/distance/VoronoiMap.h"
 #include "DGtal/geometry/volumes/distance/DistanceTransformation.h"
@@ -71,9 +70,9 @@ typedef DGtal::Z3i::RealVector RealVector;
 typedef DGtal::HyperRectDomain<Space> Domain;
 typedef DGtal::ImageContainerBySTLVector<Domain,bool> CharacteristicSet;
 typedef DGtal::ExactPredicateLpSeparableMetric<Space, 2> Metric; // L2-metric
-typedef DGtal::EigenValues3D<double> LinearAlgebraTool;
-typedef LinearAlgebraTool::Matrix33 Matrix33;
-typedef LinearAlgebraTool::Vector3 Vector3;
+typedef DGtal::EigenDecomposition<3,double> LinearAlgebraTool;
+typedef LinearAlgebraTool::Matrix Matrix33;
+typedef LinearAlgebraTool::Vector Vector3;
 typedef KSpace::Surfel Surfel;
 typedef KSpace::SCell SCell;
 
@@ -322,7 +321,7 @@ void computeSurfaceVCMFeatures( Viewer& viewer,
                                 double T )
 {
   typedef typename Surface::DigitalSurfaceContainer DigitalSurfaceContainer;
-  BOOST_CONCEPT_ASSERT(( CDigitalSurfaceContainer<DigitalSurfaceContainer> ));
+  BOOST_CONCEPT_ASSERT(( concepts::CDigitalSurfaceContainer<DigitalSurfaceContainer> ));
   typedef typename Surface::KSpace KSpace; 
   typedef typename Surface::Surfel Surfel;
   typedef typename Surface::Cell Cell;
@@ -334,7 +333,6 @@ void computeSurfaceVCMFeatures( Viewer& viewer,
   typedef typename Space::RealPoint RealPoint;
   typedef typename Space::RealVector RealVector;
   typedef typename Surface::ConstIterator SurfelConstIterator;
-  // typedef HatPointFunction<Point,double> KernelFunction;
   typedef VoronoiCovarianceMeasureOnDigitalSurface< DigitalSurfaceContainer, Metric,
                                                     KernelFunction > VCMOnSurface;
   typedef typename VCMOnSurface::VectorN VectorN;
@@ -453,7 +451,7 @@ int main( int argc, char** argv )
       int thresholdMax = vm["thresholdMax"].as<int>();
       Image image = GenericReader<Image>::import (inputFilename );
       Domain domain = image.domain();
-      typedef IntervalForegroundPredicate<Image> ThresholdedImage;
+      typedef functors::IntervalForegroundPredicate<Image> ThresholdedImage;
       ThresholdedImage thresholdedImage( image, thresholdMin, thresholdMax );
       Point dsize = domain.upperBound() - domain.lowerBound();
       trace.info() << "Image size = " << dsize[ 0 ]
@@ -488,7 +486,7 @@ int main( int argc, char** argv )
       std::ofstream output1( "titi-vcm-features.txt" );
       std::string kernel = vm[ "kernel" ].as<std::string>();
       if ( kernel == "hat" ) {
-        typedef HatPointFunction<Point,double> KernelFunction;
+        typedef functors::HatPointFunction<Point,double> KernelFunction;
         computeSurfaceVCMFeatures( viewer, output1, 
                                    surface, 
                                    vm["R-radius"].as<double>(), vm["r-radius"].as<double>(),
@@ -497,7 +495,7 @@ int main( int argc, char** argv )
                                    vm["embedding"].as<int>(),
                                    vm["angle-threshold"].as<double>() );
       } else if ( kernel == "ball" ) {
-        typedef BallConstantPointFunction<Point,double> KernelFunction;
+        typedef functors::BallConstantPointFunction<Point,double> KernelFunction;
         computeSurfaceVCMFeatures( viewer, output1, 
                                    surface, 
                                    vm["R-radius"].as<double>(), vm["r-radius"].as<double>(),

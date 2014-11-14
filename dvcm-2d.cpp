@@ -38,7 +38,6 @@
 //! [Voro2D-header]
 #include "DGtal/kernel/BasicPointPredicates.h"
 #include "DGtal/images/ImageContainerBySTLVector.h"
-#include "DGtal/images/imagesSetsUtils/SimpleThresholdForegroundPredicate.h"
 #include "DGtal/geometry/volumes/distance/ExactPredicateLpSeparableMetric.h"
 #include "DGtal/geometry/volumes/distance/VoronoiMap.h"
 #include "DGtal/geometry/volumes/distance/DistanceTransformation.h"
@@ -76,6 +75,7 @@ private:
 };
 
 using namespace DGtal;
+using namespace DGtal::functors;
 
 ///////////////////////////////////////////////////////////////////////////////
 int main( int argc, char** argv )
