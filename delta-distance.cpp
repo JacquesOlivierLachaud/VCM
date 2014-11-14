@@ -54,9 +54,9 @@ namespace po = boost::program_options;
 template <typename Distance>
 struct DistanceToPointFunctor {
 
-  typedef typename Distance::Space Space;
-  typedef typename Distance::Value Value;
-  typedef typename Space::Point    Point;
+  typedef typename Distance::Space   Space;
+  typedef typename Distance::Value   Value;
+  typedef typename Space::Point      Point;
   
   Point p;
   DistanceToPointFunctor( Clone<Distance> distance,
@@ -74,10 +74,11 @@ struct DistanceToPointFunctor {
 template <typename ImageFct>
 class DistanceToMeasure {
 public:
-  typedef typename ImageFct::Value  Value;
-  typedef typename ImageFct::Point  Point;
-  typedef typename ImageFct::Domain Domain;
-  typedef typename Domain::Space    Space;
+  typedef typename ImageFct::Value   Value;
+  typedef typename ImageFct::Point   Point;
+  typedef typename ImageFct::Domain  Domain;
+  typedef typename Domain::Space     Space;
+  typedef typename Space::RealVector RealVector;
 
 public:
   DistanceToMeasure( Value m0, const ImageFct& measure, Value rmax = 10.0 )
@@ -106,6 +107,32 @@ public:
     return myDistance2( p );
   }
 
+  Value safeDistance2( const Point& p ) const
+  {
+    if ( myDistance2.domain().isInside( p ) )
+      return myDistance2( p );
+    else return myDistance2( box( p ) );
+  }
+  
+  Point box( const Point& p ) const
+  {
+    Point q = p.sup( myDistance2.domain().lowerBound() );
+    return q.inf( myDistance2.domain().upperBound() );
+  }
+
+  RealVector projection( const Point& p ) const
+  {
+    Point px1 = box( p - Point( 1, 0 ) );
+    Point px2 = box( p + Point( 1, 0 ) );
+    Value gx = ((Value) distance2( px2 ) - (Value)distance2( px1 ))
+      / ( 2.0 * ( px2[ 0 ] - px1[ 0 ] ) );
+    Point py1 = box( p - Point( 0, 1 ) );
+    Point py2 = box( p + Point( 0, 1 ) );
+    Value gy = ((Value) distance2( py2 ) - (Value)distance2( py1 ))
+      / ( 2.0 * ( py2[ 1 ] - py1[ 1 ] ) );
+    return RealVector( -gx, -gy );
+  }
+  
   Value computeDistance2( const Point& p )
   {
     typedef ExactPredicateLpSeparableMetric<Space,2> Distance;
@@ -206,6 +233,9 @@ int main( int argc, char** argv )
       board << CustomStyle( p.className(),
                             new CustomColors( Color::Black, cmap_grad( v ) ) )
             << p;
+
+      RealVector grad = delta.projection( p );
+      board.drawLine( p[ 0 ], p[ 1 ], p[ 0 ] + grad[ 0 ], p[ 1 ] + grad[ 1 ], 0 );
     }
   std::cout << endl;
   board.saveEPS("delta2.eps");
