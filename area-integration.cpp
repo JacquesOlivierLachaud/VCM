@@ -234,8 +234,10 @@ void chooseEstimator
       Functor fct( 1.0, t );
       CanonicSCellEmbedder<KSpace> canonic_embedder( K );
       SurfelFunctor surfelFct( canonic_embedder, 1.0 );
-      NormalEstimator estimator( surface, Metric(), surfelFct, fct );
-      estimator.init( 1.0, t );
+      NormalEstimator estimator;
+      estimator.attach( surface );
+      estimator.setParams( Metric(), surfelFct, fct, t );
+      estimator.init( 1.0, surface.begin(), surface.end() );
       trace.endBlock();
       computeEstimation( vm, K, shape, surface, estimator );
     }
@@ -282,11 +284,11 @@ int main( int argc, char** argv )
   if( !parseOK || vm.count("help"))
     {
       cout << "Usage: " << argv[0] << " -p \"90-x^2-y^2-z^2\" -h 1 -R 5 -r 6 -t 2\n"
-		<< "Computes the angle of surface normal and displays potential problematic zones." 
+		<< "Computes the area of a digital surface, defined as an implicit polynomial surface, by integration of normal estimation." 
                 << endl
 		<< general_opt << "\n";
       cout << "Example:\n"
-           << "./angle-viewer -p \"90-3*x^2-2*y^2-z^2\"" << endl
+           << "./area-integration -p \"81-x^2-y^2-z^2\" -e VCM -R 3 -r 3 -g 0.5  # aire de la sphere de rayon 9, discrétisé au pas 0.5" << endl
            << " - ellipse  : 90-3*x^2-2*y^2-z^2 " << endl
            << " - torus    : -1*(x^2+y^2+z^2+6*6-2*2)^2+4*6*6*(x^2+y^2) " << endl
            << " - rcube    : 6561-x^4-y^4-z^4" << endl
