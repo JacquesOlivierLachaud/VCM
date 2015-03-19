@@ -122,15 +122,33 @@ public:
 
   RealVector projection( const Point& p ) const
   {
-    Point px1 = box( p - Point( 1, 0 ) );
-    Point px2 = box( p + Point( 1, 0 ) );
-    Value gx = ((Value) distance2( px2 ) - (Value)distance2( px1 ))
-      / ( 2.0 * ( px2[ 0 ] - px1[ 0 ] ) );
-    Point py1 = box( p - Point( 0, 1 ) );
-    Point py2 = box( p + Point( 0, 1 ) );
-    Value gy = ((Value) distance2( py2 ) - (Value)distance2( py1 ))
-      / ( 2.0 * ( py2[ 1 ] - py1[ 1 ] ) );
-    return RealVector( -gx, -gy );
+    Point p_left = box( p - Point( 1, 0 ) );
+    Point p_right = box( p + Point( 1, 0 ) );
+    Point p_down = box( p - Point( 0, 1 ) );
+    Point p_up = box( p + Point( 0, 1 ) );
+    Value d2_center = distance2( p );
+    Value d2_left = distance2( p_left );
+    Value d2_right = distance2( p_right );
+    Value d2_down = distance2( p_down );
+    Value d2_up = distance2( p_up );
+    // Value gx = 
+    //   // std::min( ( d2_right - d2_left ) / ( p_right[ 0 ] - p_left[ 0 ] ),
+    //   std::min( ( d2_right - d2_center ) / ( p_right[ 0 ] - p[ 0 ] ),
+    //             ( d2_center - d2_left ) / ( p[ 0 ] - p_left[ 0 ] ) ); //  );
+    // Value gy = 
+    //   // std::min( ( d2_up - d2_down ) / ( p_up[ 1 ] - p_down[ 1 ] ),
+    //   std::min( ( d2_up - d2_center ) / ( p_up[ 1 ] - p[ 1 ] ),
+    //             ( d2_center - d2_down ) / ( p[ 1 ] - p_down[ 1 ] ) ); // );
+    bool right = abs( d2_right - d2_center ) >= abs( d2_center - d2_left );
+    bool up    = abs( d2_up    - d2_center ) >= abs( d2_center - d2_down );
+    Value gx = right ? ( d2_right - d2_center ) : ( d2_center - d2_left );
+    Value gy = up    ? ( d2_up    - d2_center ) : ( d2_center - d2_down );
+    return RealVector( -gx / 2.0, -gy / 2.0 );
+    // Value gx = (distance2( px2 ) - distance2( px1 ))
+    //   / ( 2.0 * ( px2[ 0 ] - px1[ 0 ] ) );
+    // Value gy = (distance2( py2 ) - distance2( py1 ))
+    //   / ( 2.0 * ( py2[ 1 ] - py1[ 1 ] ) );
+    // return RealVector( -gx, -gy );
   }
   
   Value computeDistance2( const Point& p )
@@ -235,6 +253,7 @@ int main( int argc, char** argv )
             << p;
 
       RealVector grad = delta.projection( p );
+      // / ( 1.1 - ( (double)img( *it ) ) / 255.0 ) ;
       board.drawLine( p[ 0 ], p[ 1 ], p[ 0 ] + grad[ 0 ], p[ 1 ] + grad[ 1 ], 0 );
     }
   std::cout << endl;

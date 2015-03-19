@@ -1,0 +1,412 @@
+/**
+ *  This program is free software: you can redistribute it and/or modify
+ *  it under the terms of the GNU Lesser General Public License as
+ *  published by the Free Software Foundation, either version 3 of the
+ *  License, or  (at your option) any later version.
+ *
+ *  This program is distributed in the hope that it will be useful,
+ *  but WITHOUT ANY WARRANTY; without even the implied warranty of
+ *  MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+ *  GNU General Public License for more details.
+ *
+ *  You should have received a copy of the GNU General Public License
+ *  along with this program.  If not, see <http://www.gnu.org/licenses/>.
+ *
+ **/
+
+/**
+ * @file vol2offAndNormals.cpp
+ * @author Jacques-Olivier Lachaud (\c jacques-olivier.lachaud@univ-savoie.fr )
+ * Laboratory of Mathematics (CNRS, UMR 5127), University of Savoie, France
+ *
+ * @date 2015/03/20
+ *
+ * Computes the surfel surface as an off and its estimated normals.
+ *
+ * This file is part of the DGtal library.
+ */
+
+///////////////////////////////////////////////////////////////////////////////
+#include <iostream>
+#include <boost/program_options/options_description.hpp>
+#include <boost/program_options/parsers.hpp>
+#include <boost/program_options/variables_map.hpp>
+#include <QtGui/qapplication.h>
+
+#include "DGtal/base/Common.h"
+#include "DGtal/base/BasicFunctors.h"
+#include "DGtal/base/CountedConstPtrOrConstPtr.h"
+#include "DGtal/helpers/StdDefs.h"
+#include "DGtal/kernel/BasicPointPredicates.h"
+#include "DGtal/topology/helpers/Surfaces.h"
+#include "DGtal/topology/DigitalSurface.h"
+#include "DGtal/topology/ExplicitDigitalSurface.h"
+#include "DGtal/math/linalg/EigenDecomposition.h"
+#include "DGtal/images/ImageContainerBySTLVector.h"
+#include "DGtal/images/ImageSelector.h"
+#include "DGtal/images/IntervalForegroundPredicate.h"
+#include "DGtal/geometry/volumes/distance/ExactPredicateLpSeparableMetric.h"
+#include "DGtal/geometry/volumes/distance/VoronoiMap.h"
+#include "DGtal/geometry/volumes/distance/DistanceTransformation.h"
+#include "DGtal/geometry/volumes/estimation/VoronoiCovarianceMeasure.h"
+#include "DGtal/geometry/surfaces/estimation/LocalEstimatorFromSurfelFunctorAdapter.h"
+#include "DGtal/geometry/surfaces/estimation/estimationFunctors/ElementaryConvolutionNormalVectorEstimator.h"
+#include "DGtal/geometry/surfaces/estimation/VoronoiCovarianceMeasureOnDigitalSurface.h"
+#include "DGtal/io/viewers/Viewer3D.h"
+#include "DGtal/io/readers/GenericReader.h"
+#include "DGtal/io/colormaps/GradientColorMap.h"
+
+using namespace std;
+
+typedef DGtal::Z3i::Space Space;
+typedef DGtal::Z3i::KSpace KSpace;
+typedef DGtal::Z3i::Vector Vector;
+typedef DGtal::Z3i::Point Point;
+typedef DGtal::Z3i::RealPoint RealPoint;
+typedef DGtal::Z3i::RealVector RealVector;
+typedef DGtal::HyperRectDomain<Space> Domain;
+typedef DGtal::ImageContainerBySTLVector<Domain,bool> CharacteristicSet;
+typedef DGtal::ExactPredicateLpSeparableMetric<Space, 2> Metric; // L2-metric
+typedef DGtal::EigenDecomposition<3,double> LinearAlgebraTool;
+typedef LinearAlgebraTool::Matrix Matrix33;
+typedef LinearAlgebraTool::Vector Vector3;
+typedef KSpace::Surfel Surfel;
+typedef KSpace::SCell SCell;
+
+template <typename Surface>
+bool exportSteppedSurfaceAsOff( std::ostream& output,
+                                const Surface& surface )
+{
+  typedef typename Surface::KSpace        KSpace;
+  typedef typename Surface::ConstIterator ConstIterator;
+  typedef typename KSpace::SCell          SCell;
+  typedef typename KSpace::Cell           Cell;
+  typedef typename KSpace::Point          Point;
+  typedef typename KSpace::DirIterator    DirIterator;
+  // Enumerating faces, edges, vertices
+  std::set<Cell> edges;
+  std::set<Cell> vertices;
+  const KSpace& K  = surface.container().space();
+  for ( ConstIterator it = surface.begin(), itE = surface.end(); it != itE; ++it )
+    {
+      SCell surfel  = *it;
+      Cell  face    = K.unsigns( surfel );
+      DirIterator q = K.sDirs( *it );
+      DGtal::Dimension i0 = *q; ++q;
+      DGtal::Dimension i1 = *q;
+      Cell  edge0f = K.uIncident( face, i0, false );
+      Cell  edge0t = K.uIncident( face, i0, true );
+      Cell  edge1f = K.uIncident( face, i1, false );
+      Cell  edge1t = K.uIncident( face, i1, true );
+      edges.insert( edge0f );
+      edges.insert( edge0t );
+      edges.insert( edge1f );
+      edges.insert( edge1t );
+      Cell vtx00   = K.uIncident( edge0f, i1, false );
+      Cell vtx01   = K.uIncident( edge0f, i1, true );
+      Cell vtx10   = K.uIncident( edge0t, i1, false );
+      Cell vtx11   = K.uIncident( edge0t, i1, true );
+      vertices.insert( vtx00 );
+      vertices.insert( vtx01 );
+      vertices.insert( vtx10 );
+      vertices.insert( vtx11 );
+    }
+  unsigned int nbf = surface.size();
+  unsigned int nbe = edges.size();
+  unsigned int nbv = vertices.size();
+
+  // numbering vertices and outputing vertices coordinates
+  output << "OFF" << std::endl
+         << "# Generated by DGtal::vol2offAndNormals." << std::endl
+         << nbv << " " << nbf << " " << nbe << std::endl;
+  unsigned int idx = 0;
+  std::map<Cell,unsigned int> vtx2index;
+  for ( typename std::set<Cell>::const_iterator it = vertices.begin(), itE = vertices.end(); it != itE; ++it )
+    {
+      vtx2index[ *it ] = idx++;
+      Point x = K.uCoords( *it );
+      output << x[ 0 ] << " " << x[ 1 ] << " "<< x[ 2 ] << std::endl;
+    }
+  // outputing faces with correct orientation
+  for ( ConstIterator it = surface.begin(), itE = surface.end(); it != itE; ++it )
+    {
+      SCell surfel        = *it;
+      DGtal::Dimension k  = K.sOrthDir( surfel );
+      bool k_direct       = K.sDirect( surfel, k );
+      SCell v_in          = K.sIncident( surfel, k, k_direct );
+      SCell v_out         = K.sIncident( surfel, k, ! k_direct );
+      Point out_normal    = K.sCoords( v_out ) - K.sCoords( v_in );
+      Cell  face          = K.unsigns( surfel );
+      DirIterator q       = K.sDirs( *it );
+      DGtal::Dimension i0 = *q; ++q;
+      DGtal::Dimension i1 = *q;
+      Cell  edge0f        = K.uIncident( face, i0, false );
+      Cell  edge0t        = K.uIncident( face, i0, true );
+      Cell vtx00          = K.uIncident( edge0f, i1, false );
+      Cell vtx01          = K.uIncident( edge0f, i1, true );
+      Cell vtx10          = K.uIncident( edge0t, i1, false );
+      Cell vtx11          = K.uIncident( edge0t, i1, true );
+      // Forming normal vector
+      Point v00_01        = K.uCoords( vtx01 ) - K.uCoords( vtx00 );
+      Point v01_11        = K.uCoords( vtx11 ) - K.uCoords( vtx01 );
+      Point cur_normal    = v00_01.crossProduct( v01_11 );
+      output << "4 " << vtx2index[ vtx00 ] << " ";
+      if ( cur_normal.dot( out_normal ) > 0 )
+        output << vtx2index[ vtx01 ] << " " << vtx2index[ vtx11 ] << " " << vtx2index[ vtx10 ] << std::endl;
+      else
+        output << vtx2index[ vtx10 ] << " " << vtx2index[ vtx11 ] << " " << vtx2index[ vtx01 ] << std::endl;
+    }
+}
+
+template <typename Viewer, typename Surface, typename KernelFunction>
+void computeSurfaceVCM( Viewer& viewer,
+                        std::string basename,
+                        const Surface & surface, 
+                        double R, double r,
+                        KernelFunction chi,
+                        double trivial_r, int embedding )
+{
+  typedef typename Surface::DigitalSurfaceContainer DigitalSurfaceContainer;
+  BOOST_CONCEPT_ASSERT(( DGtal::concepts::CDigitalSurfaceContainer<DigitalSurfaceContainer> ));
+  using namespace DGtal;
+  typedef typename Surface::KSpace                  KSpace; 
+  typedef typename KSpace::Space                    Space;
+  typedef typename Surface::Surfel                  Surfel;
+  typedef typename Surface::Cell                    Cell;
+  typedef typename Space::Point                     Point;
+  typedef typename Space::RealPoint                 RealPoint;
+  typedef typename Space::RealVector                RealVector;
+  typedef ExactPredicateLpSeparableMetric<Space, 2> Metric; // L2-metric
+  typedef VoronoiCovarianceMeasure< Space, Metric > VCM;
+  typedef typename VCM::Domain                      Domain;
+  typedef typename Surface::ConstIterator           SurfelConstIterator;
+  typedef VoronoiCovarianceMeasureOnDigitalSurface
+    < DigitalSurfaceContainer, Metric, KernelFunction > VCMOnSurface;
+  typedef typename VCMOnSurface::VectorN            VectorN;
+  typedef typename VCMOnSurface::Surfel2Normals::const_iterator S2NConstIterator;
+  typedef Display3DFactory<Space,KSpace>            MyDisplay3DFactory;
+
+  const KSpace & ks = surface.container().space();
+  Surfel2PointEmbedding embType = 
+    embedding == 0 ? Pointels :
+    embedding == 1 ? InnerSpel :
+    OuterSpel;
+  // KernelFunction chi( 1.0, r );
+  VCMOnSurface vcm_surface( surface, embType, R, r, chi, trivial_r, Metric(), true );
+
+  trace.beginBlock ( "Visualisation des normales." );
+  VectorN lambda; // eigenvalues of chi-vcm
+  SCell dummy;
+  viewer << SetMode3D( dummy.className(), "Basic" );
+  viewer.setFillColor( DGtal::Color( 255, 255, 255 ) );
+  for ( S2NConstIterator it = vcm_surface.mapSurfel2Normals().begin(), 
+          itE = vcm_surface.mapSurfel2Normals().end(); it != itE; ++it )
+    {
+      Surfel s = it->first;
+      const VectorN & n = it->second.vcmNormal;
+      const VectorN & t = it->second.trivialNormal;
+      MyDisplay3DFactory::drawOrientedSurfelWithNormal( viewer, s, -n, false );
+
+      // vcm_surface.getChiVCMEigenvalues( lambda, s );
+      // double ratio = lambda[ 1 ] / ( lambda[ 0 ] + lambda[ 1 ] + lambda[ 2 ] ); // 3D !!!
+      // viewer << ks.unsigns( s );
+    }
+  trace.endBlock();
+
+  trace.beginBlock ( "Export de la surface." );
+  std::string surfname = basename + ".off";
+  std::ofstream off_output( surfname.c_str() );
+  exportSteppedSurfaceAsOff( off_output, surface );
+  off_output.close();
+  trace.endBlock();
+
+  trace.beginBlock ( "Export des normales par face." );
+  std::string normname = basename + ".normals";
+  std::ofstream normals_output( normname.c_str() );
+  for ( SurfelConstIterator it = surface.begin(), itE = surface.end(); it != itE; ++it )
+    {
+      Surfel s = *it;
+      S2NConstIterator normal_it = vcm_surface.mapSurfel2Normals().find( s );
+      ASSERT( normal_it != vcm_surface.mapSurfel2Normals().end() );
+      const VectorN & n = normal_it->second.vcmNormal;
+      normals_output << n[ 0 ] << " " << n[ 1 ] << " " << n[ 2 ] << std::endl;
+    }
+  normals_output.close();
+  trace.endBlock();
+
+}
+
+
+template<typename TKSpace, typename TImage2D>
+struct SurfelPredicateFromHeightField{
+  typedef TKSpace                     KSpace; // Should be 3D.
+  typedef TImage2D                    Image2D;
+  typedef typename KSpace::Point      Point;
+  typedef typename KSpace::Space      Space;
+  typedef typename KSpace::Surfel     Surfel;
+  typedef typename KSpace::SCell      SCell;
+  typedef typename Space::Integer     Integer;
+  typedef DGtal::HyperRectDomain<Space> Domain;
+  typedef typename Image2D::Value     Value;
+  typedef typename Image2D::Point     Point2D;
+  typedef typename Image2D::Domain    Domain2D;
+  typedef DGtal::SpaceND<2,Integer>   Space2D;
+
+  /**
+   *  Construct the predicat given a 2D Image
+   **/
+  SurfelPredicateFromHeightField( DGtal::ConstAlias<Image2D> anImage,
+                                  double aScale, unsigned int maxHeight,
+                                  unsigned int maxDiff )
+    : myImagePtr( anImage ), myScale( aScale ), 
+      myMaxHeight( maxHeight ), myMaxDiff( maxDiff )
+  {
+    bool ok = myK.init( domain().lowerBound(), domain().upperBound(), false );
+    ASSERT( ok );
+  }
+
+  inline
+  bool operator()( const Surfel& surfel )  const {
+    DGtal::functors::Projector<Space2D> projXY;
+    DGtal::Dimension k = myK.sOrthDir( surfel );
+    SCell vox_under    = myK.sDirectIncident( surfel, k );
+    SCell vox_above    = myK.sIndirectIncident( surfel, k );
+    bool under_inside  = isInside( myK.sCoords( vox_under ) ); 
+    bool above_inside  = isInside( myK.sCoords( vox_above ) ); 
+    if ( ( ! under_inside ) || above_inside ) return false;
+    if ( k == 2 ) return true;
+    Integer z = myK.sCoord( vox_under, 2 );
+    Integer h = (Integer) round( (*myImagePtr)(projXY(myK.sCoords( vox_under ) ))*myScale );
+    ASSERT( h >= z );
+    return ( h - z ) >= myMaxDiff;
+  }
+  
+  inline
+  bool isInside( const Point &aPoint ) const {
+    DGtal::functors::Projector<Space2D> projXY;
+    return ( (Integer) round( (*myImagePtr)(projXY(aPoint))*myScale ) )
+      >= aPoint[2] ? true : false;    
+  }
+
+  inline 
+  SCell topSurfel( const Point2D& p ) const
+  {
+    Integer h = (Integer) round( (*myImagePtr)(p) * myScale );
+    Point q( p[ 0 ], p[ 1 ], h );
+    SCell vox = myK.sSpel( q ); 
+    return myK.sIncident( vox, 2, true );
+  }
+
+  inline
+  Domain domain() const {
+    return Domain(Point(0,0,0), 
+                  Point(myImagePtr->domain().upperBound()[0],
+                        myImagePtr->domain().upperBound()[1],
+                        myMaxHeight) );
+  }
+  
+  inline const KSpace& space() const { return myK; }
+
+  DGtal::CountedConstPtrOrConstPtr<TImage2D> myImagePtr;
+  double myScale;  
+  unsigned int myMaxHeight;
+  unsigned int myMaxDiff;
+  KSpace myK;
+};
+
+///////////////////////////////////////////////////////////////////////////////
+int main( int argc, char** argv )
+{
+  using namespace DGtal;
+  typedef ImageContainerBySTLVector < Z2i::Domain, unsigned char> Image2D;
+  QApplication application(argc,argv);
+
+  // parse command line ----------------------------------------------
+  namespace po = boost::program_options;
+  po::options_description general_opt("Allowed options are: ");
+  general_opt.add_options()
+    ("help,h", "display this message")
+    ("input,i", po::value<std::string>(), "heightfield file." )
+    ("scale,s", po::value<double>()->default_value(1.0), "set the scale of the maximal level. (default 1.0)")
+    ("volZ,z", po::value<double>()->default_value(255), "set the Z max value of domain.")    
+    ("diff,d", po::value<double>()->default_value(4), "sets the maximum depth of the surface.")    
+    ("R-radius,R", po::value<double>()->default_value( 5 ), "the parameter R in the VCM." )
+    ("r-radius,r", po::value<double>()->default_value( 3 ), "the parameter r in the VCM." )
+    ("kernel,k", po::value<std::string>()->default_value( "hat" ), "the function chi_r, either hat or ball." )
+    ("trivial-radius,t", po::value<double>()->default_value( 3 ), "the parameter r for the trivial normal estimator." )
+    ("embedding,E", po::value<int>()->default_value( 0 ), "the surfel -> point embedding: 0: Pointels, 1: InnerSpel, 2: OuterSpel." )
+    ("output,o", po::value<std::string>()->default_value("surface"), "the output base filename (without extension)" )
+    ;  
+  bool parseOK=true;
+  po::variables_map vm;
+  try{
+    po::store(po::parse_command_line(argc, argv, general_opt), vm);  
+  }catch(const std::exception& ex){
+    parseOK=false;
+    trace.info()<< "Error checking program options: "<< ex.what()<< endl;
+  }
+  po::notify(vm);    
+  if( !parseOK || vm.count("help") || ! vm.count( "input" ) )
+    {
+      std::cout << "Usage: " << argv[0] << " -i [file.vol] -R 5\n"
+		<< "Reads a vol file, extract a its surface boundary and computes its normals."
+		<< general_opt << "\n";
+      std::cout << "Example:\n"
+		<< "vol2offAndNormals -i cat10.vol\n";
+      return 0;
+    }
+  trace.beginBlock( "Loading image into memory." );
+  string inputFilename = vm["input"].as<std::string>();
+  trace.info() << "Reading input file " << inputFilename << std::endl; 
+  Image2D inputImage = DGtal::GenericReader<Image2D,2,unsigned char>::import(inputFilename);  
+  double scale = vm["scale"].as<double>(); 
+  unsigned int volz = vm["volZ"].as<unsigned int>(); 
+  unsigned int diff = vm["diff"].as<unsigned int>(); 
+  trace.info() << " [done] " << std::endl ; 
+  
+  typedef SurfelPredicateFromHeightField< KSpace, Image2D > MySurfelPredicate;
+  MySurfelPredicate surfelPred( inputImage, scale, volz, diff );
+  trace.endBlock();
+  typedef typename Image2D::Domain Domain2D;
+  typedef typename Image2D::Point  Point2D;
+  typedef typename Image2D::Value  Value;
+  const Domain2D& domain2d = inputImage.domain();
+  Point2D p = domain2d.lowerBound();
+  for ( typename Domain2D::ConstIterator it = domain2d.begin(), itE = domain2d.end();
+        it != itE; ++it )
+    {
+      if ( inputImage( *it ) > inputImage( p ) ) p = *it;
+    }
+  typedef SurfelAdjacency<KSpace::dimension> MySurfelAdjacency;
+  typedef KSpace::Surfel Surfel;
+  typedef DGtal::ExplicitDigitalSurface< KSpace, MySurfelPredicate > MySurfaceContainer;
+  typedef DigitalSurface< MySurfaceContainer > MyDigitalSurface;
+  MySurfelAdjacency surfAdj( true ); // interior in all directions.
+  Surfel bel       = surfelPred.topSurfel( p );
+  const KSpace& ks = surfelPred.space();
+  MySurfaceContainer* container = 
+    new MySurfaceContainer( ks, surfelPred, surfAdj, bel, false  );
+  MyDigitalSurface surface( container ); //acquired
+  trace.info() << "Digital surface has " << surface.size() << " surfels."
+               << std::endl;
+  trace.endBlock();
+  
+  Viewer3D<> viewer( ks );
+  viewer.setWindowTitle("Voronoi 3D viewer");
+  viewer.show();
+  double R = vm["R-radius"].as<double>();
+  double r = vm["r-radius"].as<double>();
+  double t = vm["trivial-radius"].as<double>();
+  int E    = vm["embedding"].as<int>();
+  std::string kernel = vm[ "kernel" ].as<std::string>();
+  std::string basename = vm[ "output" ].as<std::string>();
+  if ( kernel == "hat" ) {
+    typedef functors::HatPointFunction<Point,double> KernelFunction;
+    computeSurfaceVCM( viewer, basename, surface, R, r, KernelFunction( 1.0, r ), t, E );
+  } else if ( kernel == "ball" ) {
+    typedef functors::BallConstantPointFunction<Point,double> KernelFunction;
+    computeSurfaceVCM( viewer, basename, surface, R, r, KernelFunction( 1.0, r ), t, E );
+  }
+  viewer << Viewer3D<>::updateDisplay;
+  return application.exec();
+}

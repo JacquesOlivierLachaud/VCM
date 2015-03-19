@@ -68,6 +68,7 @@ SET(VCM_QGL_SRC
   angle-viewer
   area-integration
   vol2offAndNormals
+  heightfield2offAndNormals
   )
 
 #add_definitions( -DWITH_EIGEN=YES )
