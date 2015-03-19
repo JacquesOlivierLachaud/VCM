@@ -67,6 +67,7 @@ SET(VCM_QGL_SRC
   generic3dNormalEstimators
   angle-viewer
   area-integration
+  vol2offAndNormals
   )
 
 #add_definitions( -DWITH_EIGEN=YES )
