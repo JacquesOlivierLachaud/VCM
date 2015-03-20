@@ -54,6 +54,7 @@
 #include "DGtal/geometry/surfaces/estimation/VoronoiCovarianceMeasureOnDigitalSurface.h"
 #include "DGtal/io/viewers/Viewer3D.h"
 #include "DGtal/io/readers/GenericReader.h"
+#include "DGtal/io/readers/PGMReader.h"
 #include "DGtal/io/colormaps/GradientColorMap.h"
 
 using namespace std;
@@ -186,6 +187,7 @@ void computeSurfaceVCM( Viewer& viewer,
   typedef typename VCMOnSurface::Surfel2Normals::const_iterator S2NConstIterator;
   typedef Display3DFactory<Space,KSpace>            MyDisplay3DFactory;
 
+  trace.beginBlock ( "Création du VCM." );
   const KSpace & ks = surface.container().space();
   Surfel2PointEmbedding embType = 
     embedding == 0 ? Pointels :
@@ -193,6 +195,7 @@ void computeSurfaceVCM( Viewer& viewer,
     OuterSpel;
   // KernelFunction chi( 1.0, r );
   VCMOnSurface vcm_surface( surface, embType, R, r, chi, trivial_r, Metric(), true );
+  trace.endBlock();
 
   trace.beginBlock ( "Visualisation des normales." );
   VectorN lambda; // eigenvalues of chi-vcm
@@ -278,7 +281,7 @@ struct SurfelPredicateFromHeightField{
     Integer z = myK.sCoord( vox_under, 2 );
     Integer h = (Integer) round( (*myImagePtr)(projXY(myK.sCoords( vox_under ) ))*myScale );
     ASSERT( h >= z );
-    return ( h - z ) >= myMaxDiff;
+    return ( h - z ) <= myMaxDiff;
   }
   
   inline
@@ -328,8 +331,8 @@ int main( int argc, char** argv )
     ("help,h", "display this message")
     ("input,i", po::value<std::string>(), "heightfield file." )
     ("scale,s", po::value<double>()->default_value(1.0), "set the scale of the maximal level. (default 1.0)")
-    ("volZ,z", po::value<double>()->default_value(255), "set the Z max value of domain.")    
-    ("diff,d", po::value<double>()->default_value(4), "sets the maximum depth of the surface.")    
+    ("volZ,z", po::value<unsigned int>()->default_value(255), "set the Z max value of domain.")    
+    ("diff,d", po::value<unsigned int>()->default_value(4), "sets the maximum depth of the surface.")    
     ("R-radius,R", po::value<double>()->default_value( 5 ), "the parameter R in the VCM." )
     ("r-radius,r", po::value<double>()->default_value( 3 ), "the parameter r in the VCM." )
     ("kernel,k", po::value<std::string>()->default_value( "hat" ), "the function chi_r, either hat or ball." )
@@ -355,11 +358,13 @@ int main( int argc, char** argv )
 		<< "vol2offAndNormals -i cat10.vol\n";
       return 0;
     }
+
   trace.beginBlock( "Loading image into memory." );
   string inputFilename = vm["input"].as<std::string>();
   trace.info() << "Reading input file " << inputFilename << std::endl; 
   Image2D inputImage = DGtal::GenericReader<Image2D,2,unsigned char>::import(inputFilename);  
-  double scale = vm["scale"].as<double>(); 
+  // Image2D inputImage = DGtal::PGMReader<Image2D>::importPGM(inputFilename);  
+  double scale      = vm["scale"].as<double>(); 
   unsigned int volz = vm["volZ"].as<unsigned int>(); 
   unsigned int diff = vm["diff"].as<unsigned int>(); 
   trace.info() << " [done] " << std::endl ; 
@@ -367,6 +372,7 @@ int main( int argc, char** argv )
   typedef SurfelPredicateFromHeightField< KSpace, Image2D > MySurfelPredicate;
   MySurfelPredicate surfelPred( inputImage, scale, volz, diff );
   trace.endBlock();
+
   typedef typename Image2D::Domain Domain2D;
   typedef typename Image2D::Point  Point2D;
   typedef typename Image2D::Value  Value;
@@ -389,7 +395,6 @@ int main( int argc, char** argv )
   MyDigitalSurface surface( container ); //acquired
   trace.info() << "Digital surface has " << surface.size() << " surfels."
                << std::endl;
-  trace.endBlock();
   
   Viewer3D<> viewer( ks );
   viewer.setWindowTitle("Voronoi 3D viewer");
