@@ -199,7 +199,9 @@ int main( int argc, char** argv )
   viewer.show(); 
   viewer << SetMode3D( bel.className(), "Basic" );
   double s_manifold = h / (0.794*R);
-  double s_homeo_xi = h*2.0*sqrt(3)/R;
+  // double s_homeo_xi = h*2.0*sqrt(3)/R;
+  // Constant has been improved in last JMIV version.
+  double s_homeo_xi = h*3.0/R;
   trace.info() << "Estimated reach    = " << (1.0/mc) << std::endl;
   trace.info() << "Chosen reach       = " << R << std::endl;
   trace.info() << "Threshold manifold = " << s_manifold << std::endl;
