@@ -50,7 +50,7 @@
 #include "DGtal/shapes/ShapeGeometricFunctors.h"
 #include "DGtal/shapes/implicit/ImplicitPolynomial3Shape.h"
 #include "DGtal/io/readers/MPolynomialReader.h"
-
+#include "DGtal/io/viewers/Viewer3D.h"
 using namespace DGtal;
 
 template <typename SCell, typename RealVector>
@@ -308,7 +308,7 @@ int main( int argc, char** argv )
   std::ofstream noff_output( noff_sstr.str().c_str() );
 
   trace.beginBlock( "Setting up estimators." );
-  typedef ShapeGeometricFunctors::ShapeNormalVectorFunctor<ImplicitShape> NormalFunctor;
+  typedef functors::ShapeGeometricFunctors::ShapeNormalVectorFunctor<ImplicitShape> NormalFunctor;
   typedef TrueDigitalSurfaceLocalEstimator<KSpace, ImplicitShape, NormalFunctor> TrueEstimator;
   TrueEstimator true_estimator;
   true_estimator.setParams( K, NormalFunctor() );

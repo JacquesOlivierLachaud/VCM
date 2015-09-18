@@ -35,7 +35,7 @@
 #include <boost/program_options/options_description.hpp>
 #include <boost/program_options/parsers.hpp>
 #include <boost/program_options/variables_map.hpp>
-#include <QtGui/qapplication.h>
+
 
 #include "DGtal/base/Common.h"
 #include "DGtal/base/CountedPtr.h"
@@ -168,7 +168,7 @@ int main( int argc, char** argv )
   trace.endBlock();
 
   trace.beginBlock( "Create estimator." );
-  typedef ShapeGeometricFunctors::ShapeNormalVectorFunctor<ImplicitShape> NormalFunctor;
+  typedef functors::ShapeGeometricFunctors::ShapeNormalVectorFunctor<ImplicitShape> NormalFunctor;
   typedef TrueDigitalSurfaceLocalEstimator<KSpace, ImplicitShape, NormalFunctor> NormalEstimator;
   typedef NormalEstimator::Quantity NQuantity;
   NormalEstimator normal_estimator;
@@ -176,7 +176,7 @@ int main( int argc, char** argv )
   normal_estimator.setParams( K, NormalFunctor(), 20, 0.1, 0.01 );
   normal_estimator.init( h, ptrSurface->begin(), ptrSurface->end() );
 
-  typedef ShapeGeometricFunctors::ShapeMeanCurvatureFunctor<ImplicitShape> CurvatureFunctor;
+  typedef functors::ShapeGeometricFunctors::ShapeMeanCurvatureFunctor<ImplicitShape> CurvatureFunctor;
   typedef TrueDigitalSurfaceLocalEstimator<KSpace, ImplicitShape, CurvatureFunctor> CurvatureEstimator;
   typedef CurvatureEstimator::Quantity CQuantity;
   CurvatureEstimator curv_estimator;

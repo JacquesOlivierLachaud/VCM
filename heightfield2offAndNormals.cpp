@@ -31,7 +31,7 @@
 #include <boost/program_options/options_description.hpp>
 #include <boost/program_options/parsers.hpp>
 #include <boost/program_options/variables_map.hpp>
-#include <QtGui/qapplication.h>
+
 
 #include "DGtal/base/Common.h"
 #include "DGtal/base/BasicFunctors.h"
@@ -323,7 +323,7 @@ int main( int argc, char** argv )
   using namespace DGtal;
   typedef ImageContainerBySTLVector < Z2i::Domain, unsigned char> Image2D;
   QApplication application(argc,argv);
-
+  
   // parse command line ----------------------------------------------
   namespace po = boost::program_options;
   po::options_description general_opt("Allowed options are: ");
@@ -397,8 +397,10 @@ int main( int argc, char** argv )
                << std::endl;
   
   Viewer3D<> viewer( ks );
-  viewer.setWindowTitle("Voronoi 3D viewer");
   viewer.show();
+
+  viewer.setWindowTitle("Voronoi 3D viewer");
+
   double R = vm["R-radius"].as<double>();
   double r = vm["r-radius"].as<double>();
   double t = vm["trivial-radius"].as<double>();
