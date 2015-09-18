@@ -35,7 +35,7 @@
 #include <boost/program_options/options_description.hpp>
 #include <boost/program_options/parsers.hpp>
 #include <boost/program_options/variables_map.hpp>
-#include <QtGui/qapplication.h>
+#include "DGtal/io/viewers/Viewer3D.h"
 
 #include "DGtal/base/Common.h"
 #include "DGtal/base/CountedPtr.h"
