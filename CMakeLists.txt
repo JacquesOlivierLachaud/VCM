@@ -76,6 +76,7 @@ SET(VCM_QGL_SRC
 FOREACH(FILE ${VCM_SRC})
   add_executable(${FILE} ${FILE})
   target_link_libraries (${FILE} ${DGTAL_LIBRARIES} ${VCMLibDependencies})
+  SET_TARGET_PROPERTIES(${FILE} PROPERTIES LINKER_LANGUAGE CXX)
   install(TARGETS ${FILE} 
         RUNTIME DESTINATION bin
         LIBRARY DESTINATION lib
@@ -87,6 +88,7 @@ if ( WITH_VISU3D_QGLVIEWER )
   FOREACH(FILE ${VCM_QGL_SRC}) 
     add_executable(${FILE} ${FILE})
     target_link_libraries ( ${FILE} ${DGTAL_LIBRARIES} ${VCMLibDependencies})   
+	SET_TARGET_PROPERTIES(${FILE} PROPERTIES LINKER_LANGUAGE CXX)
     install(TARGETS ${FILE} 
         RUNTIME DESTINATION bin
         LIBRARY DESTINATION lib

@@ -45,6 +45,8 @@
 #include "DGtal/io/readers/GenericReader.h"
 #include "DGtal/io/boards/Board2D.h"
 #include "DGtal/io/colormaps/GradientColorMap.h"
+#include "DGtal/geometry/volumes/distance/PowerMap.h"
+#include "DGtal/io/writers/GenericWriter.h"
 
 using namespace std;
 using namespace DGtal;
@@ -161,7 +163,7 @@ public:
     typedef typename DistanceVisitor::Node MyNode;
     typedef typename DistanceVisitor::Scalar MySize;
 
-    Value             m  = NumberTraits<Value>::ZERO;
+    Value             m  = NumberTraits<Value>::ONE;
     Value             d2 = NumberTraits<Value>::ZERO;
     Graph             graph;
     DistanceToPoint   d2pfct( Distance(), p );
@@ -205,6 +207,8 @@ int main( int argc, char** argv )
   typedef ImageContainerBySTLVector<Domain,unsigned char> GrayLevelImage2D;
   typedef ImageContainerBySTLVector<Domain,float>         FloatImage2D;
   typedef DistanceToMeasure<FloatImage2D>                 Distance;
+  typedef PowerMap<GrayLevelImage2D, Z2i::L2PowerMetric> PowerMap;
+  
   if ( argc <= 3 ) return 1;
   GrayLevelImage2D img  = GenericReader<GrayLevelImage2D>::import( argv[ 1 ] );
   double           mass = atof( argv[ 2 ] );
@@ -222,41 +226,70 @@ int main( int argc, char** argv )
   const FloatImage2D& d2 = delta.myDistance2;
   trace.endBlock();
 
-  float m = 0.0f;
-  for ( typename Domain::ConstIterator it = d2.domain().begin(),
-          itE = d2.domain().end(); it != itE; ++it )
-    {
-      Point p = *it;
-      float v = sqrt( d2( p ) );
-      m = std::max( v, m );
-    }
+  trace.beginBlock("Computing power map");
+  Z2i::L2PowerMetric l2Power;
+  PowerMap map(img.domain(), img, l2Power);
+  GrayLevelImage2D outImage(img.domain());
+  std::map<PowerMap::Value, int> mapSiteValue;
+  
+  double maxDist = 0.0;
+  for (auto it = map.domain().begin(), ite = map.domain().end();
+	   it != ite; ++it) {
+	  double dist = l2Power.powerDistance(*it, map(*it), (double)img(*it));
+	  if (dist > maxDist)
+		  maxDist = dist;
+  }
+  HueShadeColorMap<double,1> hueMap(0.0,maxDist);
+  int i = 0;
+  for (auto it = map.domain().begin(), ite = map.domain().end();
+	   it != ite; ++it, ++i) {
+	  PowerMap::Value site = map(*it);
+	  if (mapSiteValue.find(site) == mapSiteValue.end()) {
+		  mapSiteValue[site] = i;
+		  i++;
+	  }
+	  unsigned char c = (site[1] * 13 + site[0] * 7) % 256;
+	  c = mapSiteValue[site] % 256;
+	  outImage.setValue(*it, c);
+  }
+  GenericWriter<GrayLevelImage2D>::exportFile("delta2.pgm", outImage);
+  trace.endBlock();
+  
+  // float m = 0.0f;
+  // for ( typename Domain::ConstIterator it = d2.domain().begin(),
+  //         itE = d2.domain().end(); it != itE; ++it )
+  //   {
+  //     Point p = *it;
+  //     float v = sqrt( d2( p ) );
+  //     m = std::max( v, m );
+  //   }
 
-  GradientColorMap<float> cmap_grad( 0, m );
-  cmap_grad.addColor( Color( 255, 255, 255 ) );
-  cmap_grad.addColor( Color( 255, 255, 0 ) );
-  cmap_grad.addColor( Color( 255, 0, 0 ) );
-  cmap_grad.addColor( Color( 0, 255, 0 ) );
-  cmap_grad.addColor( Color( 0,   0, 255 ) );
-  cmap_grad.addColor( Color( 0,   0, 0 ) );
-  Board2D board;
-  board << SetMode( d2.domain().className(), "Paving" );
+  // GradientColorMap<float> cmap_grad( 0, m );
+  // cmap_grad.addColor( Color( 255, 255, 255 ) );
+  // cmap_grad.addColor( Color( 255, 255, 0 ) );
+  // cmap_grad.addColor( Color( 255, 0, 0 ) );
+  // cmap_grad.addColor( Color( 0, 255, 0 ) );
+  // cmap_grad.addColor( Color( 0,   0, 255 ) );
+  // cmap_grad.addColor( Color( 0,   0, 0 ) );
+  // Board2D board;
+  // board << SetMode( d2.domain().className(), "Paving" );
   
 
-  for ( typename Domain::ConstIterator it = d2.domain().begin(),
-          itE = d2.domain().end(); it != itE; ++it )
-    {
-      Point p = *it;
-      float v = sqrt( d2( p ) );
-      v = std::min( (float)m, std::max( v, 0.0f ) ); 
-      board << CustomStyle( p.className(),
-                            new CustomColors( Color::Black, cmap_grad( v ) ) )
-            << p;
+  // for ( typename Domain::ConstIterator it = d2.domain().begin(),
+  //         itE = d2.domain().end(); it != itE; ++it )
+  //   {
+  //     Point p = *it;
+  //     float v = sqrt( d2( p ) );
+  //     v = std::min( (float)m, std::max( v, 0.0f ) ); 
+  //     board << CustomStyle( p.className(),
+  //                           new CustomColors( Color::Black, cmap_grad( v ) ) )
+  //           << p;
 
-      RealVector grad = delta.projection( p );
-      // / ( 1.1 - ( (double)img( *it ) ) / 255.0 ) ;
-      board.drawLine( p[ 0 ], p[ 1 ], p[ 0 ] + grad[ 0 ], p[ 1 ] + grad[ 1 ], 0 );
-    }
-  std::cout << endl;
-  board.saveEPS("delta2.eps");
+  //     RealVector grad = delta.projection( p );
+  //     // / ( 1.1 - ( (double)img( *it ) ) / 255.0 ) ;
+  //     board.drawLine( p[ 0 ], p[ 1 ], p[ 0 ] + grad[ 0 ], p[ 1 ] + grad[ 1 ], 0 );
+  //   }
+  // std::cout << endl;
+  // board.saveEPS("delta2.eps");
   return 0;
 }
