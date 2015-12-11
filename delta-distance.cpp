@@ -152,45 +152,49 @@ public:
     //   / ( 2.0 * ( py2[ 1 ] - py1[ 1 ] ) );
     // return RealVector( -gx, -gy );
   }
-  
-  Value computeDistance2( const Point& p )
-  {
-    typedef ExactPredicateLpSeparableMetric<Space,2> Distance;
-    typedef DistanceToPointFunctor<Distance>         DistanceToPoint;
-    typedef MetricAdjacency<Space, 1>                Graph;
-    typedef DistanceBreadthFirstVisitor< Graph, DistanceToPoint, std::set<Point> > 
-      DistanceVisitor;
-    typedef typename DistanceVisitor::Node MyNode;
-    typedef typename DistanceVisitor::Scalar MySize;
 
-    Value             m  = NumberTraits<Value>::ONE;
-    Value             d2 = NumberTraits<Value>::ZERO;
-    Graph             graph;
-    DistanceToPoint   d2pfct( Distance(), p );
-    DistanceVisitor   visitor( graph, d2pfct, p );
 
-    unsigned long nbSurfels = 0;
-    Value last = d2pfct( p );
-    MyNode node;
-    while ( ! visitor.finished() )
-    {
-      node = visitor.current();
-      if ( ( node.second != last ) // all the vertices of the same layer have been processed. 
-           && ( m >= myMass ) ) break;
-      if ( node.second > myR2Max ) { d2 = m * myR2Max; break; }
-      if ( myMeasure.domain().isInside( node.first ) )
-        {
-          Value mpt  = myMeasure( node.first );
-          d2        += mpt * node.second * node.second; 
-          m         += mpt;
-          last       = node.second;
-          visitor.expand();
-        }
-      else
-        visitor.ignore();
-    }
-    return d2 / m;
-  }
+	Value computeDistance2( const Point& p )
+		{
+			typedef ExactPredicateLpSeparableMetric<Space,2> Distance;
+			typedef DistanceToPointFunctor<Distance>         DistanceToPoint;
+			typedef MetricAdjacency<Space, 1>                Graph;
+			typedef DistanceBreadthFirstVisitor< Graph, DistanceToPoint, std::set<Point> > 
+				DistanceVisitor;
+			typedef typename DistanceVisitor::Node MyNode;
+			typedef typename DistanceVisitor::Scalar MySize;
+
+			Value             m  = NumberTraits<Value>::ZERO;
+			Value             d2 = NumberTraits<Value>::ZERO;
+			Graph             graph;
+			DistanceToPoint   d2pfct( Distance(), p );
+			DistanceVisitor   visitor( graph, d2pfct, p );
+
+			unsigned long nbSurfels = 0;
+			Value last = d2pfct( p );
+			MyNode node;
+			while ( ! visitor.finished() )
+			{
+				node = visitor.current();
+				if ( ( node.second != last ) // all the vertices of the same layer have been processed. 
+					 && ( m >= myMass ) ) break;
+				if ( node.second > myR2Max ) { d2 = m * myR2Max; break; }
+				if ( myMeasure.domain().isInside( node.first ) )
+				{
+					Value mpt  = myMeasure( node.first );
+					d2        += mpt * pow((node.second == 0)? node.second : 1/node.second, 2); 
+					m         += mpt;
+					last       = node.second;
+					visitor.expand();
+				}
+				else
+					visitor.ignore();
+			}
+			if (m == NumberTraits<Value>::ZERO)
+				return 0;
+			return d2 / m;
+		}
+
 
 public:
   Value myMass;
@@ -205,9 +209,9 @@ int main( int argc, char** argv )
   using namespace DGtal::Z2i;
   
   typedef ImageContainerBySTLVector<Domain,unsigned char> GrayLevelImage2D;
-  typedef ImageContainerBySTLVector<Domain,float>         FloatImage2D;
+  typedef ImageContainerBySTLVector<Domain, double>         FloatImage2D;
   typedef DistanceToMeasure<FloatImage2D>                 Distance;
-  typedef PowerMap<GrayLevelImage2D, Z2i::L2PowerMetric> PowerMap;
+  typedef PowerMap<FloatImage2D, Z2i::L2PowerMetric> PowerMap;
   
   if ( argc <= 3 ) return 1;
   GrayLevelImage2D img  = GenericReader<GrayLevelImage2D>::import( argv[ 1 ] );
@@ -215,11 +219,13 @@ int main( int argc, char** argv )
   double           rmax = atof( argv[ 3 ] );
   FloatImage2D     fimg( img.domain() );
   FloatImage2D::Iterator outIt = fimg.begin();
+
+  double factor = 2;
   for ( GrayLevelImage2D::ConstIterator it = img.begin(), itE = img.end();
         it != itE; ++it )
     {
-      float v = ((float)*it) / 255.0;
-      *outIt++ = v;
+		double v = pow(((double)*it), factor);
+		*outIt++ = v;
     }
   trace.beginBlock( "Computing delta-distance." );
   Distance     delta( mass, fimg, rmax );
@@ -228,18 +234,18 @@ int main( int argc, char** argv )
 
   trace.beginBlock("Computing power map");
   Z2i::L2PowerMetric l2Power;
-  PowerMap map(img.domain(), img, l2Power);
+  PowerMap map(fimg.domain(), fimg, l2Power);
   GrayLevelImage2D outImage(img.domain());
   std::map<PowerMap::Value, int> mapSiteValue;
   
   double maxDist = 0.0;
   for (auto it = map.domain().begin(), ite = map.domain().end();
 	   it != ite; ++it) {
-	  double dist = l2Power.powerDistance(*it, map(*it), (double)img(*it));
+	  double dist = l2Power.powerDistance(map(*it), *it, pow(((double) img(*it)), factor));
 	  if (dist > maxDist)
 		  maxDist = dist;
   }
-  HueShadeColorMap<double,1> hueMap(0.0,maxDist);
+  HueShadeColorMap<double,1> hueMap(0.0, sqrt(maxDist));
   int i = 0;
   for (auto it = map.domain().begin(), ite = map.domain().end();
 	   it != ite; ++it, ++i) {
@@ -250,9 +256,12 @@ int main( int argc, char** argv )
 	  }
 	  unsigned char c = (site[1] * 13 + site[0] * 7) % 256;
 	  c = mapSiteValue[site] % 256;
-	  outImage.setValue(*it, c);
+	   double dist = l2Power.powerDistance(map(*it), *it, pow(((double) img(*it)), factor));
+	  if (dist < 0)
+	   	  dist = 0;
+	  outImage.setValue(*it, sqrt(dist));
   }
-  GenericWriter<GrayLevelImage2D>::exportFile("delta2.pgm", outImage);
+  GenericWriter<GrayLevelImage2D, 2, double, HueShadeColorMap<double>>::exportFile("delta2.ppm", outImage, hueMap);
   trace.endBlock();
   
   // float m = 0.0f;
