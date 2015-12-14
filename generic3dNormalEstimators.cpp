@@ -35,10 +35,8 @@
 #include <boost/program_options/options_description.hpp>
 #include <boost/program_options/parsers.hpp>
 #include <boost/program_options/variables_map.hpp>
+#include "DGtal/io/viewers/Viewer3D.h"
 
-#ifdef WITH_VISU3D_QGLVIEWER
-#include <QtGui/qapplication.h>
-#endif
 
 #include "DGtal/base/Common.h"
 #include "DGtal/base/CountedPtr.h"
@@ -370,7 +368,7 @@ void chooseEstimator
 {
   string nameEstimator = vm[ "estimator" ].as<string>();
   double h = vm["gridstep"].as<double>();
-  typedef ShapeGeometricFunctors::ShapeNormalVectorFunctor<ImplicitShape> NormalFunctor;
+  typedef functors::ShapeGeometricFunctors::ShapeNormalVectorFunctor<ImplicitShape> NormalFunctor;
   typedef TrueDigitalSurfaceLocalEstimator<KSpace, ImplicitShape, NormalFunctor> TrueEstimator;
   TrueEstimator true_estimator;
   true_estimator.attach( shape );

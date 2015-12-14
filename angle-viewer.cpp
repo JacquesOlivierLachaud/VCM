@@ -35,7 +35,7 @@
 #include <boost/program_options/options_description.hpp>
 #include <boost/program_options/parsers.hpp>
 #include <boost/program_options/variables_map.hpp>
-#include <QtGui/qapplication.h>
+
 
 #include "DGtal/base/Common.h"
 #include "DGtal/base/CountedPtr.h"
@@ -168,7 +168,7 @@ int main( int argc, char** argv )
   trace.endBlock();
 
   trace.beginBlock( "Create estimator." );
-  typedef ShapeGeometricFunctors::ShapeNormalVectorFunctor<ImplicitShape> NormalFunctor;
+  typedef functors::ShapeGeometricFunctors::ShapeNormalVectorFunctor<ImplicitShape> NormalFunctor;
   typedef TrueDigitalSurfaceLocalEstimator<KSpace, ImplicitShape, NormalFunctor> NormalEstimator;
   typedef NormalEstimator::Quantity NQuantity;
   NormalEstimator normal_estimator;
@@ -176,7 +176,7 @@ int main( int argc, char** argv )
   normal_estimator.setParams( K, NormalFunctor(), 20, 0.1, 0.01 );
   normal_estimator.init( h, ptrSurface->begin(), ptrSurface->end() );
 
-  typedef ShapeGeometricFunctors::ShapeMeanCurvatureFunctor<ImplicitShape> CurvatureFunctor;
+  typedef functors::ShapeGeometricFunctors::ShapeMeanCurvatureFunctor<ImplicitShape> CurvatureFunctor;
   typedef TrueDigitalSurfaceLocalEstimator<KSpace, ImplicitShape, CurvatureFunctor> CurvatureEstimator;
   typedef CurvatureEstimator::Quantity CQuantity;
   CurvatureEstimator curv_estimator;
@@ -199,7 +199,9 @@ int main( int argc, char** argv )
   viewer.show(); 
   viewer << SetMode3D( bel.className(), "Basic" );
   double s_manifold = h / (0.794*R);
-  double s_homeo_xi = h*2.0*sqrt(3)/R;
+  // double s_homeo_xi = h*2.0*sqrt(3)/R;
+  // Constant has been improved in last JMIV version.
+  double s_homeo_xi = h*3.0/R;
   trace.info() << "Estimated reach    = " << (1.0/mc) << std::endl;
   trace.info() << "Chosen reach       = " << R << std::endl;
   trace.info() << "Threshold manifold = " << s_manifold << std::endl;
