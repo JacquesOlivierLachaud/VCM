@@ -47,6 +47,8 @@
 #include "DGtal/io/colormaps/GradientColorMap.h"
 #include "DGtal/geometry/volumes/distance/PowerMap.h"
 #include "DGtal/io/writers/GenericWriter.h"
+#include "DGtal/math/linalg/EigenDecomposition.h"
+#include "PowerCovarianceMeasure.h"
 
 using namespace std;
 using namespace DGtal;
@@ -212,14 +214,22 @@ int main( int argc, char** argv )
   typedef ImageContainerBySTLVector<Domain, double>         FloatImage2D;
   typedef DistanceToMeasure<FloatImage2D>                 Distance;
   typedef PowerMap<FloatImage2D, Z2i::L2PowerMetric> PowerMap;
-  
+  typedef ExactPredicateLpPowerSeparableMetric<Space, 2> Metric;
+  typedef PowerCovarianceMeasure<Space, Metric, FloatImage2D> PowerCM;
+  typedef EigenDecomposition<2,double> LinearAlgebraTool;
+  typedef LinearAlgebraTool::Matrix Matrix;
+  typedef functors::HatPointFunction<Point,double> KernelFunction;
+  typedef functors::HatPointFunction<Point,double> KernelFunction;
   if ( argc <= 3 ) return 1;
+  
   GrayLevelImage2D img  = GenericReader<GrayLevelImage2D>::import( argv[ 1 ] );
   double           mass = atof( argv[ 2 ] );
   double           rmax = atof( argv[ 3 ] );
   FloatImage2D     fimg( img.domain() );
   FloatImage2D::Iterator outIt = fimg.begin();
-
+  Matrix vcm_r, evec;
+  Z2i::RealVector eval;
+  
   double factor = 2;
   for ( GrayLevelImage2D::ConstIterator it = img.begin(), itE = img.end();
         it != itE; ++it )
@@ -233,7 +243,20 @@ int main( int argc, char** argv )
   trace.endBlock();
 
   trace.beginBlock("Computing power map");
-  Z2i::L2PowerMetric l2Power;
+  Metric l2Power;
+
+  PowerCM pcm(fimg, 10, 10, l2Power, true);
+  KernelFunction chi( 1.0, 10 );
+  pcm.init(img.domain().begin(), img.domain().end());
+  vcm_r = pcm.measure(chi, Point(104,59));
+  LinearAlgebraTool::getEigenDecomposition( vcm_r, evec, eval );
+  trace.info() << eval[1] << " " << eval[0] << endl;
+  trace.info() << evec.column(1) << " " << evec.column(0) << endl;
+  vcm_r = pcm.measure(chi, Point(175,106));
+  LinearAlgebraTool::getEigenDecomposition( vcm_r, evec, eval );
+  trace.info() << eval[1] << " " << eval[0] << endl;
+  trace.info() << evec.column(1) << " " << evec.column(0) << endl;
+  
   PowerMap map(fimg.domain(), fimg, l2Power);
   GrayLevelImage2D outImage(img.domain());
   std::map<PowerMap::Value, int> mapSiteValue;
