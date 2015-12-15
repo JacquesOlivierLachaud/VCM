@@ -45,10 +45,6 @@
 #include "DGtal/io/readers/GenericReader.h"
 #include "DGtal/io/boards/Board2D.h"
 #include "DGtal/io/colormaps/GradientColorMap.h"
-#include "DGtal/geometry/volumes/distance/PowerMap.h"
-#include "DGtal/io/writers/GenericWriter.h"
-#include "DGtal/math/linalg/EigenDecomposition.h"
-#include "PowerCovarianceMeasure.h"
 
 using namespace std;
 using namespace DGtal;
@@ -126,77 +122,100 @@ public:
 
   RealVector projection( const Point& p ) const
   {
-    Point p_left = box( p - Point( 1, 0 ) );
-    Point p_right = box( p + Point( 1, 0 ) );
-    Point p_down = box( p - Point( 0, 1 ) );
-    Point p_up = box( p + Point( 0, 1 ) );
-    Value d2_center = distance2( p );
-    Value d2_left = distance2( p_left );
-    Value d2_right = distance2( p_right );
-    Value d2_down = distance2( p_down );
-    Value d2_up = distance2( p_up );
-    // Value gx = 
-    //   // std::min( ( d2_right - d2_left ) / ( p_right[ 0 ] - p_left[ 0 ] ),
-    //   std::min( ( d2_right - d2_center ) / ( p_right[ 0 ] - p[ 0 ] ),
-    //             ( d2_center - d2_left ) / ( p[ 0 ] - p_left[ 0 ] ) ); //  );
-    // Value gy = 
-    //   // std::min( ( d2_up - d2_down ) / ( p_up[ 1 ] - p_down[ 1 ] ),
-    //   std::min( ( d2_up - d2_center ) / ( p_up[ 1 ] - p[ 1 ] ),
-    //             ( d2_center - d2_down ) / ( p[ 1 ] - p_down[ 1 ] ) ); // );
-    bool right = abs( d2_right - d2_center ) >= abs( d2_center - d2_left );
-    bool up    = abs( d2_up    - d2_center ) >= abs( d2_center - d2_down );
-    Value gx = right ? ( d2_right - d2_center ) : ( d2_center - d2_left );
-    Value gy = up    ? ( d2_up    - d2_center ) : ( d2_center - d2_down );
-    return RealVector( -gx / 2.0, -gy / 2.0 );
-    // Value gx = (distance2( px2 ) - distance2( px1 ))
-    //   / ( 2.0 * ( px2[ 0 ] - px1[ 0 ] ) );
-    // Value gy = (distance2( py2 ) - distance2( py1 ))
-    //   / ( 2.0 * ( py2[ 1 ] - py1[ 1 ] ) );
-    // return RealVector( -gx, -gy );
+	  typedef DGtal::MetricAdjacency<Space, 1> Adjacency;
+	  std::vector<Point> neighborsP;
+	  std::back_insert_iterator<std::vector<Point> > outIterator(neighborsP);
+	  Adjacency::writeNeighbors(outIterator, p);
+
+	  typedef typename std::vector<Point>::iterator Iterator;
+	  Value distance_center = distance2( p );
+	  RealVector vectorToReturn;
+	  for (Iterator it = neighborsP.begin(), ite = neighborsP.end();
+		   it != ite; ++it) {
+		  Value distance = distance2( *it );
+		  for (int d = 0; d < Point::dimension; d++) {
+			  if (p[d] != (*it)[d]) {
+				  Point otherPoint = *it;
+				  Value otherDistance = distance2( otherPoint );
+				  otherPoint[d] = p[d] + (p[d] - (*it)[d]);
+				  if (otherPoint[d] < (*it)[d]) {
+					  Value tmpDistance = otherDistance;
+					  otherDistance  = distance;
+					  distance = tmpDistance;
+				  }
+				  vectorToReturn[d] = ( abs( distance - distance_center) >= abs( distance_center - otherDistance) ) ? -(distance - distance_center) / 2.0 : -(distance_center - otherDistance) / 2.0;
+			  }		  		  		  
+		  }
+	  }
+	  return vectorToReturn;
+    // Point p_left = box( p - Point( 1, 0 ) );
+    // Point p_right = box( p + Point( 1, 0 ) );
+    // Point p_down = box( p - Point( 0, 1 ) );
+    // Point p_up = box( p + Point( 0, 1 ) );
+	// Point p_front = box( p + Point
+    // Value d2_center = distance2( p );
+    // Value d2_left = distance2( p_left );
+    // Value d2_right = distance2( p_right );
+    // Value d2_down = distance2( p_down );
+    // Value d2_up = distance2( p_up );
+    // // Value gx = 
+    // //   // std::min( ( d2_right - d2_left ) / ( p_right[ 0 ] - p_left[ 0 ] ),
+    // //   std::min( ( d2_right - d2_center ) / ( p_right[ 0 ] - p[ 0 ] ),
+    // //             ( d2_center - d2_left ) / ( p[ 0 ] - p_left[ 0 ] ) ); //  );
+    // // Value gy = 
+    // //   // std::min( ( d2_up - d2_down ) / ( p_up[ 1 ] - p_down[ 1 ] ),
+    // //   std::min( ( d2_up - d2_center ) / ( p_up[ 1 ] - p[ 1 ] ),
+    // //             ( d2_center - d2_down ) / ( p[ 1 ] - p_down[ 1 ] ) ); // );
+    // bool right = abs( d2_right - d2_center ) >= abs( d2_center - d2_left );
+    // bool up    = abs( d2_up    - d2_center ) >= abs( d2_center - d2_down );
+    // Value gx = right ? ( d2_right - d2_center ) : ( d2_center - d2_left );
+    // Value gy = up    ? ( d2_up    - d2_center ) : ( d2_center - d2_down );
+    // return RealVector( -gx / 2.0, -gy / 2.0 );
+    // // Value gx = (distance2( px2 ) - distance2( px1 ))
+    // //   / ( 2.0 * ( px2[ 0 ] - px1[ 0 ] ) );
+    // // Value gy = (distance2( py2 ) - distance2( py1 ))
+    // //   / ( 2.0 * ( py2[ 1 ] - py1[ 1 ] ) );
+    // // return RealVector( -gx, -gy );
   }
+  
+  Value computeDistance2( const Point& p )
+  {
+    typedef ExactPredicateLpSeparableMetric<Space,2> Distance;
+    typedef DistanceToPointFunctor<Distance>         DistanceToPoint;
+    typedef MetricAdjacency<Space, 1>                Graph;
+    typedef DistanceBreadthFirstVisitor< Graph, DistanceToPoint, std::set<Point> > 
+      DistanceVisitor;
+    typedef typename DistanceVisitor::Node MyNode;
+    typedef typename DistanceVisitor::Scalar MySize;
 
+    Value             m  = NumberTraits<Value>::ZERO;
+    Value             d2 = NumberTraits<Value>::ZERO;
+    Graph             graph;
+    DistanceToPoint   d2pfct( Distance(), p );
+    DistanceVisitor   visitor( graph, d2pfct, p );
 
-	Value computeDistance2( const Point& p )
-		{
-			typedef ExactPredicateLpSeparableMetric<Space,2> Distance;
-			typedef DistanceToPointFunctor<Distance>         DistanceToPoint;
-			typedef MetricAdjacency<Space, 1>                Graph;
-			typedef DistanceBreadthFirstVisitor< Graph, DistanceToPoint, std::set<Point> > 
-				DistanceVisitor;
-			typedef typename DistanceVisitor::Node MyNode;
-			typedef typename DistanceVisitor::Scalar MySize;
-
-			Value             m  = NumberTraits<Value>::ZERO;
-			Value             d2 = NumberTraits<Value>::ZERO;
-			Graph             graph;
-			DistanceToPoint   d2pfct( Distance(), p );
-			DistanceVisitor   visitor( graph, d2pfct, p );
-
-			unsigned long nbSurfels = 0;
-			Value last = d2pfct( p );
-			MyNode node;
-			while ( ! visitor.finished() )
-			{
-				node = visitor.current();
-				if ( ( node.second != last ) // all the vertices of the same layer have been processed. 
-					 && ( m >= myMass ) ) break;
-				if ( node.second > myR2Max ) { d2 = m * myR2Max; break; }
-				if ( myMeasure.domain().isInside( node.first ) )
-				{
-					Value mpt  = myMeasure( node.first );
-					d2        += mpt * pow((node.second == 0)? node.second : 1/node.second, 2); 
-					m         += mpt;
-					last       = node.second;
-					visitor.expand();
-				}
-				else
-					visitor.ignore();
-			}
-			if (m == NumberTraits<Value>::ZERO)
-				return 0;
-			return d2 / m;
-		}
-
+    unsigned long nbSurfels = 0;
+    Value last = d2pfct( p );
+    MyNode node;
+    while ( ! visitor.finished() )
+    {
+      node = visitor.current();
+      if ( ( node.second != last ) // all the vertices of the same layer have been processed. 
+           && ( m >= myMass ) ) break;
+      if ( node.second > myR2Max ) { d2 = m * myR2Max; break; }
+      if ( myMeasure.domain().isInside( node.first ) )
+        {
+          Value mpt  = myMeasure( node.first );
+          d2        += mpt * node.second * node.second; 
+          m         += mpt;
+          last       = node.second;
+          visitor.expand();
+        }
+      else
+        visitor.ignore();
+    }
+    return d2 / m;
+  }
 
 public:
   Value myMass;
@@ -211,117 +230,61 @@ int main( int argc, char** argv )
   using namespace DGtal::Z2i;
   
   typedef ImageContainerBySTLVector<Domain,unsigned char> GrayLevelImage2D;
-  typedef ImageContainerBySTLVector<Domain, double>         FloatImage2D;
+  typedef ImageContainerBySTLVector<Domain,float>         FloatImage2D;
   typedef DistanceToMeasure<FloatImage2D>                 Distance;
-  typedef PowerMap<FloatImage2D, Z2i::L2PowerMetric> PowerMap;
-  typedef ExactPredicateLpPowerSeparableMetric<Space, 2> Metric;
-  typedef PowerCovarianceMeasure<Space, Metric, FloatImage2D> PowerCM;
-  typedef EigenDecomposition<2,double> LinearAlgebraTool;
-  typedef LinearAlgebraTool::Matrix Matrix;
-  typedef functors::HatPointFunction<Point,double> KernelFunction;
-  typedef functors::HatPointFunction<Point,double> KernelFunction;
   if ( argc <= 3 ) return 1;
-  
   GrayLevelImage2D img  = GenericReader<GrayLevelImage2D>::import( argv[ 1 ] );
   double           mass = atof( argv[ 2 ] );
   double           rmax = atof( argv[ 3 ] );
   FloatImage2D     fimg( img.domain() );
   FloatImage2D::Iterator outIt = fimg.begin();
-  Matrix vcm_r, evec;
-  Z2i::RealVector eval;
-  
-  double factor = 2;
   for ( GrayLevelImage2D::ConstIterator it = img.begin(), itE = img.end();
         it != itE; ++it )
     {
-		double v = pow(((double)*it), factor);
-		*outIt++ = v;
+      float v = ((float)*it) / 255.0;
+      *outIt++ = v;
     }
   trace.beginBlock( "Computing delta-distance." );
   Distance     delta( mass, fimg, rmax );
   const FloatImage2D& d2 = delta.myDistance2;
   trace.endBlock();
 
-  trace.beginBlock("Computing power map");
-  Metric l2Power;
+  float m = 0.0f;
+  for ( typename Domain::ConstIterator it = d2.domain().begin(),
+          itE = d2.domain().end(); it != itE; ++it )
+    {
+      Point p = *it;
+      float v = sqrt( d2( p ) );
+      m = std::max( v, m );
+    }
 
-  PowerCM pcm(fimg, 10, 10, l2Power, true);
-  KernelFunction chi( 1.0, 10 );
-  pcm.init(img.domain().begin(), img.domain().end());
-  vcm_r = pcm.measure(chi, Point(104,59));
-  LinearAlgebraTool::getEigenDecomposition( vcm_r, evec, eval );
-  trace.info() << eval[1] << " " << eval[0] << endl;
-  trace.info() << evec.column(1) << " " << evec.column(0) << endl;
-  vcm_r = pcm.measure(chi, Point(175,106));
-  LinearAlgebraTool::getEigenDecomposition( vcm_r, evec, eval );
-  trace.info() << eval[1] << " " << eval[0] << endl;
-  trace.info() << evec.column(1) << " " << evec.column(0) << endl;
-  
-  PowerMap map(fimg.domain(), fimg, l2Power);
-  GrayLevelImage2D outImage(img.domain());
-  std::map<PowerMap::Value, int> mapSiteValue;
-  
-  double maxDist = 0.0;
-  for (auto it = map.domain().begin(), ite = map.domain().end();
-	   it != ite; ++it) {
-	  double dist = l2Power.powerDistance(map(*it), *it, pow(((double) img(*it)), factor));
-	  if (dist > maxDist)
-		  maxDist = dist;
-  }
-  HueShadeColorMap<double,1> hueMap(0.0, sqrt(maxDist));
-  int i = 0;
-  for (auto it = map.domain().begin(), ite = map.domain().end();
-	   it != ite; ++it, ++i) {
-	  PowerMap::Value site = map(*it);
-	  if (mapSiteValue.find(site) == mapSiteValue.end()) {
-		  mapSiteValue[site] = i;
-		  i++;
-	  }
-	  unsigned char c = (site[1] * 13 + site[0] * 7) % 256;
-	  c = mapSiteValue[site] % 256;
-	   double dist = l2Power.powerDistance(map(*it), *it, pow(((double) img(*it)), factor));
-	  if (dist < 0)
-	   	  dist = 0;
-	  outImage.setValue(*it, sqrt(dist));
-  }
-  GenericWriter<GrayLevelImage2D, 2, double, HueShadeColorMap<double>>::exportFile("delta2.ppm", outImage, hueMap);
-  trace.endBlock();
-  
-  // float m = 0.0f;
-  // for ( typename Domain::ConstIterator it = d2.domain().begin(),
-  //         itE = d2.domain().end(); it != itE; ++it )
-  //   {
-  //     Point p = *it;
-  //     float v = sqrt( d2( p ) );
-  //     m = std::max( v, m );
-  //   }
-
-  // GradientColorMap<float> cmap_grad( 0, m );
-  // cmap_grad.addColor( Color( 255, 255, 255 ) );
-  // cmap_grad.addColor( Color( 255, 255, 0 ) );
-  // cmap_grad.addColor( Color( 255, 0, 0 ) );
-  // cmap_grad.addColor( Color( 0, 255, 0 ) );
-  // cmap_grad.addColor( Color( 0,   0, 255 ) );
-  // cmap_grad.addColor( Color( 0,   0, 0 ) );
-  // Board2D board;
-  // board << SetMode( d2.domain().className(), "Paving" );
+  GradientColorMap<float> cmap_grad( 0, m );
+  cmap_grad.addColor( Color( 255, 255, 255 ) );
+  cmap_grad.addColor( Color( 255, 255, 0 ) );
+  cmap_grad.addColor( Color( 255, 0, 0 ) );
+  cmap_grad.addColor( Color( 0, 255, 0 ) );
+  cmap_grad.addColor( Color( 0,   0, 255 ) );
+  cmap_grad.addColor( Color( 0,   0, 0 ) );
+  Board2D board;
+  board << SetMode( d2.domain().className(), "Paving" );
   
 
-  // for ( typename Domain::ConstIterator it = d2.domain().begin(),
-  //         itE = d2.domain().end(); it != itE; ++it )
-  //   {
-  //     Point p = *it;
-  //     float v = sqrt( d2( p ) );
-  //     v = std::min( (float)m, std::max( v, 0.0f ) ); 
-  //     board << CustomStyle( p.className(),
-  //                           new CustomColors( Color::Black, cmap_grad( v ) ) )
-  //           << p;
+  for ( typename Domain::ConstIterator it = d2.domain().begin(),
+          itE = d2.domain().end(); it != itE; ++it )
+    {
+      Point p = *it;
+      float v = sqrt( d2( p ) );
+      v = std::min( (float)m, std::max( v, 0.0f ) ); 
+      board << CustomStyle( p.className(),
+                            new CustomColors( Color::Black, cmap_grad( v ) ) )
+            << p;
 
-  //     RealVector grad = delta.projection( p );
-  //     // / ( 1.1 - ( (double)img( *it ) ) / 255.0 ) ;
-  //     board.drawLine( p[ 0 ], p[ 1 ], p[ 0 ] + grad[ 0 ], p[ 1 ] + grad[ 1 ], 0 );
-  //   }
-  // std::cout << endl;
-  // board.saveEPS("delta2.eps");
+      RealVector grad = delta.projection( p );
+      // / ( 1.1 - ( (double)img( *it ) ) / 255.0 ) ;
+      board.drawLine( p[ 0 ], p[ 1 ], p[ 0 ] + grad[ 0 ], p[ 1 ] + grad[ 1 ], 0 );
+    }
+  std::cout << endl;
+  board.saveEPS("delta2.eps");
   return 0;
 }
+		 
