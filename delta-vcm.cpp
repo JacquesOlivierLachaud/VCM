@@ -327,8 +327,9 @@ struct DeltaVCM {
         Scalar chi = chi_r( q - p );
         if ( chi <= 0.0 ) continue;
         // JOL: to check : I don't know if you should weight chi by the measure.
-        // chi *= myDelta.measure()( q ); 
-        // chi *= myProjectedMeasure( q ); 
+        // (0) no correction
+        chi *= myDelta.measure()( q );     // (1) more stable than (2) and (0)
+        // chi *= myProjectedMeasure( q ); // (2)
         //trace.info() << "chi=" << chi << " VCM=" << myVCM( q ) << endl;
         M += ::operator*(chi, myVCM( q ) ); // workaround simplematrix bug in DGtal.
       }
@@ -481,19 +482,21 @@ int main( int argc, char** argv )
       LinearAlgebraTool::getEigenDecomposition( vcm_r, evec, eval );
       //double feature = eval[ 0 ] / ( eval[ 0 ] +  eval[ 1 ] );
       eval[ 0 ] = std::max( eval[ 0 ], 0.00001 );
-      double tubular = ( eval[ 1 ] <= (R*R/4.0) )
+      double tubular = ( eval[ 1 ] <= 0.00001 ) // (R*R/4.0) )
         ? 0
         : ( eval[ 1 ] / ( eval[ 0 ] + eval[ 1 ] ) );
       double bound = T1;
-      double tubular2 = tubular <= bound ? 0.0 : ( tubular - bound ) / (1.0 - bound);
+      double tubular2 = tubular * (eval[ 0 ] + eval[ 1 ]) / (R*R*r/12.0);
+      double display = tubular2 <= bound ? 0.0 : ( tubular2 - bound ) / (1.0 - bound);
       //: eval[ 1 ] / ( 1.0 + eval[ 0 ] ) / ( 1.0 + delta( p )*delta( p ) );
       //: eval[ 1 ] * eval[ 1 ] / ( 1.0 + eval[ 0 ] ) / ( 1.0 + delta( p ) );
       trace.info() << "l0=" << eval[ 0 ] << " l1=" << eval[ 1 ]
                    << " tub=" << tubular
-                   << " tub2=" << tubular2 << std::endl;
+                   << " tub2=" << tubular2
+                   << " disp=" << display << std::endl;
       board << CustomStyle( p.className(), 
                             new CustomColors( Color::Black,
-                                              colormap( tubular2 > T2 ? T2 : tubular2 ) ) )
+                                              colormap( display > T2 ? T2 : display ) ) )
             << p;
       // Display normal
       RealVector normal = evec.column( 0 );
