@@ -43,9 +43,9 @@
 #include "DGtal/images/ImageContainerBySTLVector.h"
 #include "DGtal/io/colormaps/GradientColorMap.h"
 #include "DGtal/io/readers/GenericReader.h"
-#include "DGtal/io/writers/GenericWriter.h"
 #include "DGtal/io/boards/Board2D.h"
 #include "DGtal/io/colormaps/GradientColorMap.h"
+#include "DGtal/io/viewers/Viewer3D.h"
 #include "DGtal/math/linalg/EigenDecomposition.h"
 #include "DGtal/kernel/Point2ScalarFunctors.h"
 
@@ -55,10 +55,10 @@ namespace po = boost::program_options;
 
 // work-arounds for DGtal
 namespace DGtal {
-  typedef SimpleMatrix< double, 2, 2 > MatrixDouble;
+  typedef SimpleMatrix< double, 3, 3 > MatrixDouble;
   bool operator!=( const MatrixDouble& m1, const MatrixDouble& m2 )
   { return ! ( m1 == m2 ); }
-  typedef SimpleMatrix< float, 2, 2 > MatrixFloat;
+  typedef SimpleMatrix< float, 3, 3 > MatrixFloat;
   bool operator!=( const MatrixFloat& m1, const MatrixFloat& m2 )
   { return ! ( m1 == m2 ); }
   namespace functors {
@@ -119,7 +119,7 @@ public:
       }
   }
 
-  inline const Domain& domain() const
+    inline const Domain& domain() const
   {
     return myMeasure.domain();
   }
@@ -145,6 +145,7 @@ public:
   {
     return sqrt( distance2( p ) );
   }
+
   Value distance2( const Point& p ) const
   {
     return myDistance2( p );
@@ -165,33 +166,55 @@ public:
 
   RealVector projection( const Point& p ) const
   {
-    Point p_left = box( p - Point( 1, 0 ) );
-    Point p_right = box( p + Point( 1, 0 ) );
-    Point p_down = box( p - Point( 0, 1 ) );
-    Point p_up = box( p + Point( 0, 1 ) );
-    Value d2_center = distance2( p );
-    Value d2_left = distance2( p_left );
-    Value d2_right = distance2( p_right );
-    Value d2_down = distance2( p_down );
-    Value d2_up = distance2( p_up );
-    // Value gx = 
-    //   // std::min( ( d2_right - d2_left ) / ( p_right[ 0 ] - p_left[ 0 ] ),
-    //   std::min( ( d2_right - d2_center ) / ( p_right[ 0 ] - p[ 0 ] ),
-    //             ( d2_center - d2_left ) / ( p[ 0 ] - p_left[ 0 ] ) ); //  );
-    // Value gy = 
-    //   // std::min( ( d2_up - d2_down ) / ( p_up[ 1 ] - p_down[ 1 ] ),
-    //   std::min( ( d2_up - d2_center ) / ( p_up[ 1 ] - p[ 1 ] ),
-    //             ( d2_center - d2_down ) / ( p[ 1 ] - p_down[ 1 ] ) ); // );
-    bool right = abs( d2_right - d2_center ) >= abs( d2_center - d2_left );
-    bool up    = abs( d2_up    - d2_center ) >= abs( d2_center - d2_down );
-    Value gx = right ? ( d2_right - d2_center ) : ( d2_center - d2_left );
-    Value gy = up    ? ( d2_up    - d2_center ) : ( d2_center - d2_down );
-    return RealVector( -gx / 2.0, -gy / 2.0 );
-    // Value gx = (distance2( px2 ) - distance2( px1 ))
-    //   / ( 2.0 * ( px2[ 0 ] - px1[ 0 ] ) );
-    // Value gy = (distance2( py2 ) - distance2( py1 ))
-    //   / ( 2.0 * ( py2[ 1 ] - py1[ 1 ] ) );
-    // return RealVector( -gx, -gy );
+	  typedef DGtal::MetricAdjacency<Space, 1> Adjacency;
+	  std::vector<Point> neighborsP;
+	  std::back_insert_iterator<std::vector<Point> > outIterator(neighborsP);
+	  Adjacency::writeNeighbors(outIterator, p);
+
+	  typedef typename std::vector<Point>::iterator Iterator;
+	  Value distance_center = distance2( p );
+	  RealVector vectorToReturn;
+	  for (Iterator it = neighborsP.begin(), ite = neighborsP.end();
+		   it != ite; ++it) {
+		  Value distance = (myDistance2.domain().isInside(*it)) ? distance2( *it ) : distance_center;
+		  for (int d = 0; d < Point::dimension; d++) {
+			  if (p[d] < (*it)[d]) {
+				  Point otherPoint = *it;
+				  otherPoint[d] = p[d] + (p[d] - (*it)[d]);
+				  Value otherDistance = (myDistance2.domain().isInside(otherPoint)) ? distance2( otherPoint ) : distance_center;
+				  vectorToReturn[d] = ( abs( distance - distance_center) >= abs( distance_center - otherDistance) ) ? -(distance - distance_center) / 2.0 : -(distance_center - otherDistance) / 2.0;
+			  }		  		  		  
+		  }
+	  }
+	  return vectorToReturn;
+    // Point p_left = box( p - Point( 1, 0 ) );
+    // Point p_right = box( p + Point( 1, 0 ) );
+    // Point p_down = box( p - Point( 0, 1 ) );
+    // Point p_up = box( p + Point( 0, 1 ) );
+	// Point p_front = box( p + Point
+    // Value d2_center = distance2( p );
+    // Value d2_left = distance2( p_left );
+    // Value d2_right = distance2( p_right );
+    // Value d2_down = distance2( p_down );
+    // Value d2_up = distance2( p_up );
+    // // Value gx = 
+    // //   // std::min( ( d2_right - d2_left ) / ( p_right[ 0 ] - p_left[ 0 ] ),
+    // //   std::min( ( d2_right - d2_center ) / ( p_right[ 0 ] - p[ 0 ] ),
+    // //             ( d2_center - d2_left ) / ( p[ 0 ] - p_left[ 0 ] ) ); //  );
+    // // Value gy = 
+    // //   // std::min( ( d2_up - d2_down ) / ( p_up[ 1 ] - p_down[ 1 ] ),
+    // //   std::min( ( d2_up - d2_center ) / ( p_up[ 1 ] - p[ 1 ] ),
+    // //             ( d2_center - d2_down ) / ( p[ 1 ] - p_down[ 1 ] ) ); // );
+    // bool right = abs( d2_right - d2_center ) >= abs( d2_center - d2_left );
+    // bool up    = abs( d2_up    - d2_center ) >= abs( d2_center - d2_down );
+    // Value gx = right ? ( d2_right - d2_center ) : ( d2_center - d2_left );
+    // Value gy = up    ? ( d2_up    - d2_center ) : ( d2_center - d2_down );
+    // return RealVector( -gx / 2.0, -gy / 2.0 );
+    // // Value gx = (distance2( px2 ) - distance2( px1 ))
+    // //   / ( 2.0 * ( px2[ 0 ] - px1[ 0 ] ) );
+    // // Value gy = (distance2( py2 ) - distance2( py1 ))
+    // //   / ( 2.0 * ( py2[ 1 ] - py1[ 1 ] ) );
+    // // return RealVector( -gx, -gy );
   }
   
   Value computeDistance2( const Point& p )
@@ -240,6 +263,7 @@ public:
   Value myR2Max;
 };
 
+
 /**
  * A distance-like function d is a proper function (of infinite limit)
  * with the 1-semi concave property. The distance to a measure is a
@@ -263,7 +287,7 @@ struct DeltaVCM {
 
   typedef ImageContainerBySTLVector<Domain,Matrix> MatrixField;
 
-  DeltaVCM( const DistanceLikeFunction& delta, double R, double r )
+  DeltaVCM( const DistanceLikeFunction& delta, float R, float r )
     : myDelta( delta ), myR( R ), myr( r ),
       myVCM( delta.domain() ),
       myProjectedMeasure( delta.domain() )
@@ -371,92 +395,82 @@ struct DeltaVCM {
 };
 
 
+
+
 int main( int argc, char** argv )
 {
   using namespace DGtal;
-  using namespace DGtal::Z2i;
+  using namespace DGtal::Z3i;
   
-  typedef ImageContainerBySTLVector<Domain,unsigned char> GrayLevelImage2D;
-  typedef ImageContainerBySTLVector<Domain,double>         DoubleImage2D;
-  typedef DistanceToMeasure<DoubleImage2D>                 Distance;
+  typedef ImageContainerBySTLVector<Domain,unsigned char> GrayLevelImage3D;
+  typedef ImageContainerBySTLVector<Domain,float>         FloatImage3D;
+  typedef DistanceToMeasure<FloatImage3D>                 Distance;
   if ( argc <= 3 ) return 1;
-  GrayLevelImage2D img  = GenericReader<GrayLevelImage2D>::import( argv[ 1 ] );
-  double           mass = atof( argv[ 2 ] );
-  double           rmax = atof( argv[ 3 ] );
-  double           R    = atof( argv[ 4 ] );
-  double           r    = atof( argv[ 5 ] );
-  double           T1    = atof( argv[ 6 ] );
-  double           T2    = atof( argv[ 7 ] );
-  DoubleImage2D     fimg( img.domain() );
-  DoubleImage2D::Iterator outIt = fimg.begin();
-  for ( GrayLevelImage2D::ConstIterator it = img.begin(), itE = img.end();
+  GrayLevelImage3D img  = GenericReader<GrayLevelImage3D>::import( argv[ 1 ] );
+  float            mass = atof( argv[ 2 ] );
+  float            rmax = atof( argv[ 3 ] );
+  float            R    = atof( argv[ 4 ] );
+  float            r    = atof( argv[ 5 ] );
+  float            T1    = atof( argv[ 6 ] );
+  float            T2    = atof( argv[ 7 ] );
+  FloatImage3D     fimg( img.domain() );
+  FloatImage3D::Iterator outIt = fimg.begin();
+  for ( GrayLevelImage3D::ConstIterator it = img.begin(), itE = img.end();
         it != itE; ++it )
     {
-      double v = ((double)*it) / 255.0;
+      float v = ((float)*it) / 255.0;
       *outIt++ = v;
     }
   trace.beginBlock( "Computing delta-distance." );
   Distance     delta( mass, fimg, rmax );
-  const DoubleImage2D& d2 = delta.myDistance2;
+  const FloatImage3D& d2 = delta.myDistance2;
   trace.endBlock();
 
-  double m = 0.0f;
+  float m = 0.0f;
   for ( typename Domain::ConstIterator it = d2.domain().begin(),
           itE = d2.domain().end(); it != itE; ++it )
     {
       Point p = *it;
-      double v = sqrt( d2( p ) );
+      float v = sqrt( d2( p ) );
       m = std::max( v, m );
     }
+  
+  // GradientColorMap<float> cmap_grad( 0, m );
+  // cmap_grad.addColor( Color( 255, 255, 255 ) );
+  // cmap_grad.addColor( Color( 255, 255, 0 ) );
+  // cmap_grad.addColor( Color( 255, 0, 0 ) );
+  // cmap_grad.addColor( Color( 0, 255, 0 ) );
+  // cmap_grad.addColor( Color( 0,   0, 255 ) );
+  // cmap_grad.addColor( Color( 0,   0, 0 ) );
+  // QApplication application(argc,argv);
+  // Viewer3D<> viewer;
+  // viewer.show();
 
-  GradientColorMap<double> cmap_grad( 0, m );
-  cmap_grad.addColor( Color( 255, 255, 255 ) );
-  cmap_grad.addColor( Color( 255, 255, 0 ) );
-  cmap_grad.addColor( Color( 255, 0, 0 ) );
-  cmap_grad.addColor( Color( 0, 255, 0 ) );
-  cmap_grad.addColor( Color( 0,   0, 255 ) );
-  cmap_grad.addColor( Color( 0,   0, 0 ) );
-  Board2D board;
-  board << SetMode( d2.domain().className(), "Paving" );
-  
-  for ( typename Domain::ConstIterator it = d2.domain().begin(),
-          itE = d2.domain().end(); it != itE; ++it )
-    {
-      Point p = *it;
-      double v = sqrt( d2( p ) );
-      v = std::min( (double) m, std::max( v, 0.0 ) ); 
-      board << CustomStyle( p.className(),
-                            new CustomColors( Color::Black, cmap_grad( v ) ) )
-            << p;
-      RealVector grad = delta.projection( p );
-      board.drawLine( p[ 0 ], p[ 1 ], p[ 0 ] + grad[ 0 ], p[ 1 ] + grad[ 1 ], 0 );
-    }
-  std::cout << endl;
-  board.saveEPS("dvcm-delta2.eps");
-  board.clear();
-  
+  // for ( typename Domain::ConstIterator it = d2.domain().begin(),
+  //         itE = d2.domain().end(); it != itE; ++it )
+  //   {
+  //     Point p = *it;
+  //     float v = sqrt( d2( p ) );
+  //     v = std::min( (float)m, std::max( v, 0.0f ) ); 
+  //     viewer << CustomColors3D(Color(cmap_grad(v).red(), cmap_grad(v).green(), cmap_grad(v).blue(), 120), Color(cmap_grad(v).red(), cmap_grad(v).green(), cmap_grad(v).blue(),120) )
+  //           << p;
+
+  //     RealVector grad = delta.projection( p );
+  //     viewer.addLine( p, p+grad );
+  //   }
+  // std::cout << endl;
+  // viewer << Viewer3D<>::updateDisplay;
+  // application.exec();
+
   trace.beginBlock( "Computing delta-VCM." );
   typedef DeltaVCM< Distance > DVCM;
   typedef DVCM::Matrix                     Matrix;
   DVCM dvcm( delta, R, r );
   trace.endBlock();
 
-  {
-    GrayLevelImage2D pm_img( dvcm.myProjectedMeasure.domain() );
-    DoubleImage2D::ConstIterator it    = dvcm.myProjectedMeasure.begin();
-    DoubleImage2D::ConstIterator itE   = dvcm.myProjectedMeasure.end();
-    GrayLevelImage2D::Iterator  outIt = pm_img.begin();
-    for ( ; it != itE; ++it )
-      {
-        double v = std::max( 0.0, std::min( (*it) * 255.0, 255.0 ) );
-        *outIt++ = v;
-      }
-    
-    GenericWriter< GrayLevelImage2D >::exportFile( "dvcm-projmeasure.pgm", pm_img );
-  }
 
-  typedef EigenDecomposition<2,double> LinearAlgebraTool;
-  typedef functors::HatPointFunction<Point,double> KernelFunction;
+  typedef EigenDecomposition<3,float> LinearAlgebraTool;
+  typedef functors::HatPointFunction<Point,float> KernelFunction;
   KernelFunction chi( 1.0, r );
 
   // Flat zones are metallic blue, slightly curved zones are white,
@@ -468,7 +482,13 @@ int main( int argc, char** argv )
   colormap.addColor( Color( 255, 255, 0 ) );
   colormap.addColor( Color( 255, 0, 0 ) );
   Matrix vcm_r, evec, null;
-  RealVector eval;
+  typedef PointVector<3,float> RealVector3f;
+  RealVector3f eval;
+
+  QApplication application(argc,argv);
+  Viewer3D<> viewer;
+  viewer.show();
+
   for ( Domain::ConstIterator it = dvcm.domain().begin(), itE = dvcm.domain().end();
         it != itE; ++it )
     {
@@ -478,31 +498,31 @@ int main( int argc, char** argv )
       if ( vcm_r == null ) continue;
       LinearAlgebraTool::getEigenDecomposition( vcm_r, evec, eval );
       //double feature = eval[ 0 ] / ( eval[ 0 ] +  eval[ 1 ] );
-      eval[ 0 ] = std::max( eval[ 0 ], 0.00001 );
-      double tubular = ( eval[ 1 ] <= 0.00001 ) // (R*R/4.0) )
+      eval[ 0 ] = std::max( eval[ 0 ], 0.00001f );
+      float tubular = ( eval[ 2 ] <= 0.00001f ) // (R*R/4.0) )
         ? 0
-        : ( eval[ 1 ] / ( eval[ 0 ] + eval[ 1 ] ) );
-      double bound = T1;
-      double tubular2 = tubular * (eval[ 0 ] + eval[ 1 ]) / (R*R*r/12.0);
-      double display = tubular2 <= bound ? 0.0 : ( tubular2 - bound ) / (1.0 - bound);
+        : ( ( eval[ 1 ] + eval[ 2 ] ) / ( eval[ 0 ] + eval[ 1 ] + eval[ 2 ] ) );
+      float bound = T1;
+      float tubular2 = tubular * (eval[ 0 ] + eval[ 1 ] + eval[ 2 ] ) / (R*R*r*r*3.14f/12.0f);
+      float display = tubular2 <= bound ? 0.0f : ( tubular2 - bound ) / (1.0f - bound);
       //: eval[ 1 ] / ( 1.0 + eval[ 0 ] ) / ( 1.0 + delta( p )*delta( p ) );
       //: eval[ 1 ] * eval[ 1 ] / ( 1.0 + eval[ 0 ] ) / ( 1.0 + delta( p ) );
       trace.info() << "l0=" << eval[ 0 ] << " l1=" << eval[ 1 ]
                    << " tub=" << tubular
                    << " tub2=" << tubular2
                    << " disp=" << display << std::endl;
-      board << CustomStyle( p.className(), 
-                            new CustomColors( Color::Black,
-                                              colormap( display > T2 ? T2 : display ) ) )
-            << p;
-      // Display normal
-      RealVector normal = evec.column( 0 );
-      RealPoint rp( p[ 0 ], p[ 1 ] ); 
-      Display2DFactory::draw( board, size*normal, rp );
-      Display2DFactory::draw( board, -size*normal, rp );
+      if (display > 0.9f*T2 )
+        {
+          viewer << CustomColors3D( Color::Black,
+                                    colormap( display > T2 ? T2 : display ) )
+                 << p;
+          RealVector normal = evec.column( 0 );
+          RealPoint rp( p[ 0 ], p[ 1 ] ); 
+          viewer.addLine( rp - size*normal, rp + size*normal );
+        }
     }      
-  board.saveEPS("dvcm-hat-r.eps");
-  board.clear();
-  
+  viewer << Viewer3D<>::updateDisplay;
+  application.exec();
   return 0;
 }
+		 

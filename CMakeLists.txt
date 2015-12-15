@@ -63,6 +63,7 @@ SET(VCM_SRC
   )
 # Add source files needing QGLViewer here.
 SET(VCM_QGL_SRC
+  delta-vcm-3d
   dvcm-3d
   dvcm-features-3d
   implicitShape3NormalEstimation
