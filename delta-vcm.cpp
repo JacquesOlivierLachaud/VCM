@@ -333,7 +333,33 @@ struct DeltaVCM {
       }
     return M;
   }
-  
+
+  // chi_r is normalized to have mass 1.
+  template <typename Point2ScalarFunction>
+  Matrix measure1( Point2ScalarFunction chi_r, Point p ) const
+  {
+    Integer r = (Integer) ceil( myr );
+    Point low = domain().lowerBound().sup( p - Point::diagonal( r ) );
+    Point up = domain().upperBound().inf( p + Point::diagonal( r ) );
+    //trace.info() << "r=" << r << " low=" << low << " up=" << up << std::endl;
+    Domain local( low, up );
+    Scalar mass = 0.0;
+    Matrix M;
+    for ( typename Domain::ConstIterator it = local.begin(), itE = local.end();
+          it != itE; ++it )
+      {
+        Point q = *it;
+        Scalar chi = chi_r( q - p );
+        if ( chi <= 0.0 ) continue;
+        mass += chi;
+        // JOL: to check : I don't know if you should weight chi by the measure.
+        chi *= myDelta.measure()( q ); 
+        //trace.info() << "chi=" << chi << " VCM=" << myVCM( q ) << endl;
+        M += myVCM( q ) * chi; // else ::operator*(chi, myVCM( q )); workaround simplematrix bug in DGtal.
+      }
+    return mass > 0.0 ? M / mass : M;
+  }
+
   
   DistanceLikeFunction myDelta;
   Scalar               myR;
@@ -406,7 +432,7 @@ int main( int argc, char** argv )
       board.drawLine( p[ 0 ], p[ 1 ], p[ 0 ] + grad[ 0 ], p[ 1 ] + grad[ 1 ], 0 );
     }
   std::cout << endl;
-  board.saveEPS("delta2.eps");
+  board.saveEPS("dvcm-delta2.eps");
   board.clear();
   
   trace.beginBlock( "Computing delta-VCM." );
@@ -426,7 +452,7 @@ int main( int argc, char** argv )
         *outIt++ = v;
       }
     
-    GenericWriter< GrayLevelImage2D >::exportFile( "projmeasure.pgm", pm_img );
+    GenericWriter< GrayLevelImage2D >::exportFile( "dvcm-projmeasure.pgm", pm_img );
   }
 
   typedef EigenDecomposition<2,double> LinearAlgebraTool;
@@ -448,15 +474,18 @@ int main( int argc, char** argv )
     {
       // Compute VCM and diagonalize it.
       Point p = *it;
-      vcm_r = dvcm.measure( chi, p );
+      vcm_r = dvcm.measure1( chi, p );
       if ( vcm_r == null ) continue;
       LinearAlgebraTool::getEigenDecomposition( vcm_r, evec, eval );
       //double feature = eval[ 0 ] / ( eval[ 0 ] +  eval[ 1 ] );
-      eval[ 0 ] = std::max( eval[ 0 ], 0.0 );
-      double tubular = ( eval[ 1 ] <= r )
+      eval[ 0 ] = std::max( eval[ 0 ], 0.00001 );
+      double tubular = ( eval[ 1 ] <= 0.00001 )
         ? 0
-        : eval[ 1 ] / ( 1.0 + eval[ 0 ] ) / ( 1.0 + delta( p )*delta( p ) ); // * eval[ 1 ] / ( 1.0 + eval[ 0 ] ) / ( 1.0 + delta( p ) );
-      trace.info() << "l0=" << eval[ 0 ] << " l1=" << eval[ 1 ] << std::endl;
+        : 2.0*(eval[ 1 ]) / (R*R) / ( eval[ 0 ] );
+      //: eval[ 1 ] / ( 1.0 + eval[ 0 ] ) / ( 1.0 + delta( p )*delta( p ) );
+      //: eval[ 1 ] * eval[ 1 ] / ( 1.0 + eval[ 0 ] ) / ( 1.0 + delta( p ) );
+      trace.info() << "l0=" << eval[ 0 ] << " l1=" << eval[ 1 ]
+                   << " tubular=" << tubular << std::endl;
       board << CustomStyle( p.className(), 
                             new CustomColors( Color::Black,
                                               colormap( tubular > T ? T : tubular ) ) )
