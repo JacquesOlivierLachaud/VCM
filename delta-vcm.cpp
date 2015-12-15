@@ -327,7 +327,8 @@ struct DeltaVCM {
         Scalar chi = chi_r( q - p );
         if ( chi <= 0.0 ) continue;
         // JOL: to check : I don't know if you should weight chi by the measure.
-        chi *= myDelta.measure()( q ); 
+        // chi *= myDelta.measure()( q ); 
+        // chi *= myProjectedMeasure( q ); 
         //trace.info() << "chi=" << chi << " VCM=" << myVCM( q ) << endl;
         M += ::operator*(chi, myVCM( q ) ); // workaround simplematrix bug in DGtal.
       }
@@ -383,7 +384,8 @@ int main( int argc, char** argv )
   double           rmax = atof( argv[ 3 ] );
   double           R    = atof( argv[ 4 ] );
   double           r    = atof( argv[ 5 ] );
-  double           T    = atof( argv[ 6 ] );
+  double           T1    = atof( argv[ 6 ] );
+  double           T2    = atof( argv[ 7 ] );
   DoubleImage2D     fimg( img.domain() );
   DoubleImage2D::Iterator outIt = fimg.begin();
   for ( GrayLevelImage2D::ConstIterator it = img.begin(), itE = img.end();
@@ -462,7 +464,7 @@ int main( int argc, char** argv )
   // Flat zones are metallic blue, slightly curved zones are white,
   // more curved zones are yellow till red.
   double size = 1.0;
-  GradientColorMap<double> colormap( 0.0, T );
+  GradientColorMap<double> colormap( 0.0, T2 );
   colormap.addColor( Color( 128, 128, 255 ) );
   colormap.addColor( Color( 255, 255, 255 ) );
   colormap.addColor( Color( 255, 255, 0 ) );
@@ -474,21 +476,24 @@ int main( int argc, char** argv )
     {
       // Compute VCM and diagonalize it.
       Point p = *it;
-      vcm_r = dvcm.measure1( chi, p );
+      vcm_r = dvcm.measure( chi, p );
       if ( vcm_r == null ) continue;
       LinearAlgebraTool::getEigenDecomposition( vcm_r, evec, eval );
       //double feature = eval[ 0 ] / ( eval[ 0 ] +  eval[ 1 ] );
       eval[ 0 ] = std::max( eval[ 0 ], 0.00001 );
-      double tubular = ( eval[ 1 ] <= 0.00001 )
+      double tubular = ( eval[ 1 ] <= (R*R/4.0) )
         ? 0
-        : 2.0*(eval[ 1 ]) / (R*R) / ( eval[ 0 ] );
+        : ( eval[ 1 ] / ( eval[ 0 ] + eval[ 1 ] ) );
+      double bound = T1;
+      double tubular2 = tubular <= bound ? 0.0 : ( tubular - bound ) / (1.0 - bound);
       //: eval[ 1 ] / ( 1.0 + eval[ 0 ] ) / ( 1.0 + delta( p )*delta( p ) );
       //: eval[ 1 ] * eval[ 1 ] / ( 1.0 + eval[ 0 ] ) / ( 1.0 + delta( p ) );
       trace.info() << "l0=" << eval[ 0 ] << " l1=" << eval[ 1 ]
-                   << " tubular=" << tubular << std::endl;
+                   << " tub=" << tubular
+                   << " tub2=" << tubular2 << std::endl;
       board << CustomStyle( p.className(), 
                             new CustomColors( Color::Black,
-                                              colormap( tubular > T ? T : tubular ) ) )
+                                              colormap( tubular2 > T2 ? T2 : tubular2 ) ) )
             << p;
       // Display normal
       RealVector normal = evec.column( 0 );
