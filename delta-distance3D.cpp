@@ -225,16 +225,16 @@ int main( int argc, char** argv )
   using namespace DGtal;
   using namespace DGtal::Z3i;
   
-  typedef ImageContainerBySTLVector<Domain,unsigned char> GrayLevelImage2D;
-  typedef ImageContainerBySTLVector<Domain,float>         FloatImage2D;
-  typedef DistanceToMeasure<FloatImage2D>                 Distance;
+  typedef ImageContainerBySTLVector<Domain,unsigned char> GrayLevelImage3D;
+  typedef ImageContainerBySTLVector<Domain,float>         FloatImage3D;
+  typedef DistanceToMeasure<FloatImage3D>                 Distance;
   if ( argc <= 3 ) return 1;
-  GrayLevelImage2D img  = GenericReader<GrayLevelImage2D>::import( argv[ 1 ] );
+  GrayLevelImage3D img  = GenericReader<GrayLevelImage3D>::import( argv[ 1 ] );
   double           mass = atof( argv[ 2 ] );
   double           rmax = atof( argv[ 3 ] );
-  FloatImage2D     fimg( img.domain() );
-  FloatImage2D::Iterator outIt = fimg.begin();
-  for ( GrayLevelImage2D::ConstIterator it = img.begin(), itE = img.end();
+  FloatImage3D     fimg( img.domain() );
+  FloatImage3D::Iterator outIt = fimg.begin();
+  for ( GrayLevelImage3D::ConstIterator it = img.begin(), itE = img.end();
         it != itE; ++it )
     {
       float v = ((float)*it) / 255.0;
@@ -242,7 +242,7 @@ int main( int argc, char** argv )
     }
   trace.beginBlock( "Computing delta-distance." );
   Distance     delta( mass, fimg, rmax );
-  const FloatImage2D& d2 = delta.myDistance2;
+  const FloatImage3D& d2 = delta.myDistance2;
   trace.endBlock();
 
   float m = 0.0f;
