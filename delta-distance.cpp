@@ -45,6 +45,7 @@
 #include "DGtal/io/readers/GenericReader.h"
 #include "DGtal/io/boards/Board2D.h"
 #include "DGtal/io/colormaps/GradientColorMap.h"
+#include "DGtal/io/viewers/Viewer3D.h"
 
 using namespace std;
 using namespace DGtal;
@@ -132,12 +133,12 @@ public:
 	  RealVector vectorToReturn;
 	  for (Iterator it = neighborsP.begin(), ite = neighborsP.end();
 		   it != ite; ++it) {
-		  Value distance = (myDistance2.domain().isInside(*it)) ? distance2( *it ) : 0;
+		  Value distance = (myDistance2.domain().isInside(*it)) ? distance2( *it ) : distance_center;
 		  for (int d = 0; d < Point::dimension; d++) {
 			  if (p[d] != (*it)[d]) {
 				  Point otherPoint = *it;
 				  otherPoint[d] = p[d] + (p[d] - (*it)[d]);
-				  Value otherDistance = (myDistance2.domain().isInside(otherPoint)) ? distance2( otherPoint ) : 0;
+				  Value otherDistance = (myDistance2.domain().isInside(otherPoint)) ? distance2( otherPoint ) : distance_center;
 				  if (otherPoint[d] < (*it)[d]) {
 					  Value tmpDistance = otherDistance;
 					  otherDistance  = distance;
@@ -227,7 +228,7 @@ public:
 int main( int argc, char** argv )
 {
   using namespace DGtal;
-  using namespace DGtal::Z2i;
+  using namespace DGtal::Z3i;
   
   typedef ImageContainerBySTLVector<Domain,unsigned char> GrayLevelImage2D;
   typedef ImageContainerBySTLVector<Domain,float>         FloatImage2D;
@@ -265,8 +266,10 @@ int main( int argc, char** argv )
   cmap_grad.addColor( Color( 0, 255, 0 ) );
   cmap_grad.addColor( Color( 0,   0, 255 ) );
   cmap_grad.addColor( Color( 0,   0, 0 ) );
-  Board2D board;
-  board << SetMode( d2.domain().className(), "Paving" );
+  QApplication application(argc,argv);
+  Viewer3D<> viewer;
+  viewer.show();
+  //board << SetMode( d2.domain().className(), "Paving" );
   
 
   for ( typename Domain::ConstIterator it = d2.domain().begin(),
@@ -275,16 +278,16 @@ int main( int argc, char** argv )
       Point p = *it;
       float v = sqrt( d2( p ) );
       v = std::min( (float)m, std::max( v, 0.0f ) ); 
-      board << CustomStyle( p.className(),
-                            new CustomColors( Color::Black, cmap_grad( v ) ) )
+      viewer << CustomColors3D(cmap_grad(v), cmap_grad( v ) )
             << p;
 
       RealVector grad = delta.projection( p );
       // / ( 1.1 - ( (double)img( *it ) ) / 255.0 ) ;
-      board.drawLine( p[ 0 ], p[ 1 ], p[ 0 ] + grad[ 0 ], p[ 1 ] + grad[ 1 ], 0 );
+	  viewer.addLine( p, p+grad );
     }
   std::cout << endl;
-  board.saveEPS("delta2.eps");
+  viewer << Viewer3D<>::updateDisplay;
+  application.exec();
   return 0;
 }
 		 
