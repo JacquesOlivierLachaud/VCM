@@ -122,33 +122,60 @@ public:
 
   RealVector projection( const Point& p ) const
   {
-    Point p_left = box( p - Point( 1, 0 ) );
-    Point p_right = box( p + Point( 1, 0 ) );
-    Point p_down = box( p - Point( 0, 1 ) );
-    Point p_up = box( p + Point( 0, 1 ) );
-    Value d2_center = distance2( p );
-    Value d2_left = distance2( p_left );
-    Value d2_right = distance2( p_right );
-    Value d2_down = distance2( p_down );
-    Value d2_up = distance2( p_up );
-    // Value gx = 
-    //   // std::min( ( d2_right - d2_left ) / ( p_right[ 0 ] - p_left[ 0 ] ),
-    //   std::min( ( d2_right - d2_center ) / ( p_right[ 0 ] - p[ 0 ] ),
-    //             ( d2_center - d2_left ) / ( p[ 0 ] - p_left[ 0 ] ) ); //  );
-    // Value gy = 
-    //   // std::min( ( d2_up - d2_down ) / ( p_up[ 1 ] - p_down[ 1 ] ),
-    //   std::min( ( d2_up - d2_center ) / ( p_up[ 1 ] - p[ 1 ] ),
-    //             ( d2_center - d2_down ) / ( p[ 1 ] - p_down[ 1 ] ) ); // );
-    bool right = abs( d2_right - d2_center ) >= abs( d2_center - d2_left );
-    bool up    = abs( d2_up    - d2_center ) >= abs( d2_center - d2_down );
-    Value gx = right ? ( d2_right - d2_center ) : ( d2_center - d2_left );
-    Value gy = up    ? ( d2_up    - d2_center ) : ( d2_center - d2_down );
-    return RealVector( -gx / 2.0, -gy / 2.0 );
-    // Value gx = (distance2( px2 ) - distance2( px1 ))
-    //   / ( 2.0 * ( px2[ 0 ] - px1[ 0 ] ) );
-    // Value gy = (distance2( py2 ) - distance2( py1 ))
-    //   / ( 2.0 * ( py2[ 1 ] - py1[ 1 ] ) );
-    // return RealVector( -gx, -gy );
+	  typedef DGtal::MetricAdjacency<Space, 1> Adjacency;
+	  std::vector<Point> neighborsP;
+	  std::back_insert_iterator<std::vector<Point> > outIterator(neighborsP);
+	  Adjacency::writeNeighbors(outIterator, p);
+
+	  typedef typename std::vector<Point>::iterator Iterator;
+	  Value distance_center = distance2( p );
+	  RealVector vectorToReturn;
+	  for (Iterator it = neighborsP.begin(), ite = neighborsP.end();
+		   it != ite; ++it) {
+		  Value distance = distance2( *it );
+		  for (int d = 0; d < Point::dimension; d++) {
+			  if (p[d] != (*it)[d]) {
+				  Point otherPoint = *it;
+				  Value otherDistance = distance2( otherPoint );
+				  otherPoint[d] = p[d] + (p[d] - (*it)[d]);
+				  if (otherPoint[d] < (*it)[d]) {
+					  Value tmpDistance = otherDistance;
+					  otherDistance  = distance;
+					  distance = tmpDistance;
+				  }
+				  vectorToReturn[d] = ( abs( distance - distance_center) >= abs( distance_center - otherDistance) ) ? -(distance - distance_center) / 2.0 : -(distance_center - otherDistance) / 2.0;
+			  }		  		  		  
+		  }
+	  }
+	  return vectorToReturn;
+    // Point p_left = box( p - Point( 1, 0 ) );
+    // Point p_right = box( p + Point( 1, 0 ) );
+    // Point p_down = box( p - Point( 0, 1 ) );
+    // Point p_up = box( p + Point( 0, 1 ) );
+	// Point p_front = box( p + Point
+    // Value d2_center = distance2( p );
+    // Value d2_left = distance2( p_left );
+    // Value d2_right = distance2( p_right );
+    // Value d2_down = distance2( p_down );
+    // Value d2_up = distance2( p_up );
+    // // Value gx = 
+    // //   // std::min( ( d2_right - d2_left ) / ( p_right[ 0 ] - p_left[ 0 ] ),
+    // //   std::min( ( d2_right - d2_center ) / ( p_right[ 0 ] - p[ 0 ] ),
+    // //             ( d2_center - d2_left ) / ( p[ 0 ] - p_left[ 0 ] ) ); //  );
+    // // Value gy = 
+    // //   // std::min( ( d2_up - d2_down ) / ( p_up[ 1 ] - p_down[ 1 ] ),
+    // //   std::min( ( d2_up - d2_center ) / ( p_up[ 1 ] - p[ 1 ] ),
+    // //             ( d2_center - d2_down ) / ( p[ 1 ] - p_down[ 1 ] ) ); // );
+    // bool right = abs( d2_right - d2_center ) >= abs( d2_center - d2_left );
+    // bool up    = abs( d2_up    - d2_center ) >= abs( d2_center - d2_down );
+    // Value gx = right ? ( d2_right - d2_center ) : ( d2_center - d2_left );
+    // Value gy = up    ? ( d2_up    - d2_center ) : ( d2_center - d2_down );
+    // return RealVector( -gx / 2.0, -gy / 2.0 );
+    // // Value gx = (distance2( px2 ) - distance2( px1 ))
+    // //   / ( 2.0 * ( px2[ 0 ] - px1[ 0 ] ) );
+    // // Value gy = (distance2( py2 ) - distance2( py1 ))
+    // //   / ( 2.0 * ( py2[ 1 ] - py1[ 1 ] ) );
+    // // return RealVector( -gx, -gy );
   }
   
   Value computeDistance2( const Point& p )
@@ -260,3 +287,4 @@ int main( int argc, char** argv )
   board.saveEPS("delta2.eps");
   return 0;
 }
+		 
