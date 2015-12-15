@@ -135,15 +135,10 @@ public:
 		   it != ite; ++it) {
 		  Value distance = (myDistance2.domain().isInside(*it)) ? distance2( *it ) : distance_center;
 		  for (int d = 0; d < Point::dimension; d++) {
-			  if (p[d] != (*it)[d]) {
+			  if (p[d] < (*it)[d]) {
 				  Point otherPoint = *it;
 				  otherPoint[d] = p[d] + (p[d] - (*it)[d]);
 				  Value otherDistance = (myDistance2.domain().isInside(otherPoint)) ? distance2( otherPoint ) : distance_center;
-				  if (otherPoint[d] < (*it)[d]) {
-					  Value tmpDistance = otherDistance;
-					  otherDistance  = distance;
-					  distance = tmpDistance;
-				  }
 				  vectorToReturn[d] = ( abs( distance - distance_center) >= abs( distance_center - otherDistance) ) ? -(distance - distance_center) / 2.0 : -(distance_center - otherDistance) / 2.0;
 			  }		  		  		  
 		  }
@@ -278,7 +273,7 @@ int main( int argc, char** argv )
       Point p = *it;
       float v = sqrt( d2( p ) );
       v = std::min( (float)m, std::max( v, 0.0f ) ); 
-      viewer << CustomColors3D(cmap_grad(v), cmap_grad( v ) )
+      viewer << CustomColors3D(Color(cmap_grad(v).red(), cmap_grad(v).green(), cmap_grad(v).blue(), 120), Color(cmap_grad(v).red(), cmap_grad(v).green(), cmap_grad(v).blue(),120) )
             << p;
 
       RealVector grad = delta.projection( p );
