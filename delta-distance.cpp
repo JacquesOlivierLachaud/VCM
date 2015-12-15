@@ -132,12 +132,12 @@ public:
 	  RealVector vectorToReturn;
 	  for (Iterator it = neighborsP.begin(), ite = neighborsP.end();
 		   it != ite; ++it) {
-		  Value distance = distance2( *it );
+		  Value distance = (myDistance2.domain().isInside(*it)) ? distance2( *it ) : 0;
 		  for (int d = 0; d < Point::dimension; d++) {
 			  if (p[d] != (*it)[d]) {
 				  Point otherPoint = *it;
-				  Value otherDistance = distance2( otherPoint );
 				  otherPoint[d] = p[d] + (p[d] - (*it)[d]);
+				  Value otherDistance = (myDistance2.domain().isInside(otherPoint)) ? distance2( otherPoint ) : 0;
 				  if (otherPoint[d] < (*it)[d]) {
 					  Value tmpDistance = otherDistance;
 					  otherDistance  = distance;
