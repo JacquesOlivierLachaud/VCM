@@ -57,6 +57,7 @@ endif( Boost_FOUND )
 SET(VCM_SRC
   dvcm-2d
   delta-distance
+  delta-distance3D
   delta-vcm
   )
 # Add source files needing QGLViewer here.
