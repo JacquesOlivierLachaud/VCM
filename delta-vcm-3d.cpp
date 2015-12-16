@@ -306,7 +306,8 @@ struct DeltaVCM {
         if ( myDelta( p ) > myR ) continue;
         RealVector n = myDelta.projection( p );
         Point      q = Point( (Integer) round( p[ 0 ] + n[ 0 ] ),
-                              (Integer) round( p[ 1 ] + n[ 1 ] ) );
+                              (Integer) round( p[ 1 ] + n[ 1 ] ),
+                              (Integer) round( p[ 2 ] + n[ 2 ] ) );
         // eliminates projections going outside the domain.
         if ( q != myDelta.box( q ) ) continue;
         for ( Dimension i = 0; i < Space::dimension; ++i ) 
@@ -399,6 +400,8 @@ struct DeltaVCM {
 
 int main( int argc, char** argv )
 {
+  QApplication application(argc,argv);
+
   using namespace DGtal;
   using namespace DGtal::Z3i;
   
@@ -413,6 +416,22 @@ int main( int argc, char** argv )
   float            r    = atof( argv[ 5 ] );
   float            T1    = atof( argv[ 6 ] );
   float            T2    = atof( argv[ 7 ] );
+  unsigned char    seuil = atof( argv[ 8 ] );
+
+  {
+    Viewer3D<> viewer;
+    viewer.show();
+    
+    for ( Domain::ConstIterator it = img.domain().begin(), itE = img.domain().end();
+          it != itE; ++it )
+      {
+        // std::cout << *it << " " << (int) img( *it ) << endl;
+        if ( img( *it ) > seuil ) viewer << *it;
+      }
+    viewer << Viewer3D<>::updateDisplay;
+    application.exec();
+  }
+
   FloatImage3D     fimg( img.domain() );
   FloatImage3D::Iterator outIt = fimg.begin();
   for ( GrayLevelImage3D::ConstIterator it = img.begin(), itE = img.end();
@@ -485,7 +504,6 @@ int main( int argc, char** argv )
   typedef PointVector<3,float> RealVector3f;
   RealVector3f eval;
 
-  QApplication application(argc,argv);
   Viewer3D<> viewer;
   viewer.show();
 
