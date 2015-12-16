@@ -67,6 +67,58 @@ namespace DGtal {
   }
 }
 
+/**
+* Structure to store a traversal in a graph. Useful if you have a
+* translation invariant graph and if you wish to repeat the traversal
+* from another point.
+*/
+template <typename TVisitor>
+struct TraversalReplay
+{
+  typedef TVisitor                  Visitor;
+  typedef typename Visitor::Node    Node;
+  typedef typename Visitor::Scalar  Scalar;
+  typedef typename Visitor::Vertex  Vertex;
+  typedef std::vector<Node>         Container;
+  typedef typename Container::const_iterator ConstIterator;
+
+  std::vector<Node> myNodes;
+  
+  TraversalReplay() {}
+
+  void init( Visitor& visitor, Scalar dmax )
+  {
+    myNodes.clear();
+    Node node;
+    while ( ! visitor.finished() )
+      {
+        node = visitor.current();
+        myNodes.push_back( node );
+        if ( node.second > dmax ) break;
+        visitor.expand();
+      }
+  }
+
+  struct NodeLessComparator {
+    bool operator()( const Node& n1, const Node& n2 ) const
+    {
+      return n1.second < n2.second;
+    }
+  };
+
+  ConstIterator begin() const { return myNodes.begin(); }
+  ConstIterator end() const   { return myNodes.end(); }
+  // Returns an iterator pointing to the first element which does not compare less than val.
+  ConstIterator find( Scalar val ) const 
+  {
+    Node dummy( Vertex(), val ); 
+    return std::lower_bound( begin(), end(), dummy, NodeLessComparator() );
+  }
+
+};
+
+
+
 template <typename Distance>
 struct DistanceToPointFunctor {
 
@@ -86,6 +138,7 @@ struct DistanceToPointFunctor {
   Distance myDistance;
 };
 
+
 // A measure is a function
 template <typename TImageFct>
 class DistanceToMeasure {
@@ -95,18 +148,35 @@ public:
   typedef typename ImageFct::Point   Point;
   typedef typename ImageFct::Domain  Domain;
   typedef typename Domain::Space     Space;
+  typedef typename Space::Vector     Vector;
   typedef typename Space::RealVector RealVector;
+
+  typedef ExactPredicateLpSeparableMetric<Space,2> Distance;
+  typedef DistanceToPointFunctor<Distance>         DistanceToPoint;
+  typedef MetricAdjacency<Space, 1>                Graph;
+  typedef DistanceBreadthFirstVisitor< Graph, DistanceToPoint, std::set<Point> > 
+  DistanceVisitor;
+  typedef TraversalReplay< DistanceVisitor >       DistanceTraversal;
 
 public:
   DistanceToMeasure( Value m0, const ImageFct& measure, Value rmax = 10.0 )
     : myMass( m0 ), myMeasure( measure ), myDistance2( myMeasure.domain() ),
-      myR2Max( rmax*rmax )
+      myRMax( rmax )
   {
     init( myMeasure );
   }
   
   void init( const ImageFct& measure )
   {
+    // Precompute traversal
+    myP0 = *( myDistance2.domain().begin() );
+    Value             m  = NumberTraits<Value>::ZERO;
+    Value             d2 = NumberTraits<Value>::ZERO;
+    Graph             graph;
+    DistanceToPoint   d2pfct( Distance(), myP0 );
+    DistanceVisitor   visitor( graph, d2pfct, myP0 );
+    myTraversal.init( visitor, myRMax );
+
     double       nb = myDistance2.domain().size();
     unsigned int i  = 0;
     trace.progressBar( i, nb );
@@ -166,32 +236,32 @@ public:
 
   RealVector projection( const Point& p ) const
   {
-	  typedef DGtal::MetricAdjacency<Space, 1> Adjacency;
-	  std::vector<Point> neighborsP;
-	  std::back_insert_iterator<std::vector<Point> > outIterator(neighborsP);
-	  Adjacency::writeNeighbors(outIterator, p);
+    typedef DGtal::MetricAdjacency<Space, 1> Adjacency;
+    std::vector<Point> neighborsP;
+    std::back_insert_iterator<std::vector<Point> > outIterator(neighborsP);
+    Adjacency::writeNeighbors(outIterator, p);
 
-	  typedef typename std::vector<Point>::iterator Iterator;
-	  Value distance_center = distance2( p );
-	  RealVector vectorToReturn;
-	  for (Iterator it = neighborsP.begin(), ite = neighborsP.end();
-		   it != ite; ++it) {
-		  Value distance = (myDistance2.domain().isInside(*it)) ? distance2( *it ) : distance_center;
-		  for (int d = 0; d < Point::dimension; d++) {
-			  if (p[d] < (*it)[d]) {
-				  Point otherPoint = *it;
-				  otherPoint[d] = p[d] + (p[d] - (*it)[d]);
-				  Value otherDistance = (myDistance2.domain().isInside(otherPoint)) ? distance2( otherPoint ) : distance_center;
-				  vectorToReturn[d] = ( abs( distance - distance_center) >= abs( distance_center - otherDistance) ) ? -(distance - distance_center) / 2.0 : -(distance_center - otherDistance) / 2.0;
-			  }		  		  		  
-		  }
-	  }
-	  return vectorToReturn;
+    typedef typename std::vector<Point>::iterator Iterator;
+    Value distance_center = distance2( p );
+    RealVector vectorToReturn;
+    for (Iterator it = neighborsP.begin(), ite = neighborsP.end();
+         it != ite; ++it) {
+      Value distance = (myDistance2.domain().isInside(*it)) ? distance2( *it ) : distance_center;
+      for (int d = 0; d < Point::dimension; d++) {
+        if (p[d] < (*it)[d]) {
+          Point otherPoint = *it;
+          otherPoint[d] = p[d] + (p[d] - (*it)[d]);
+          Value otherDistance = (myDistance2.domain().isInside(otherPoint)) ? distance2( otherPoint ) : distance_center;
+          vectorToReturn[d] = ( abs( distance - distance_center) >= abs( distance_center - otherDistance) ) ? -(distance - distance_center) / 2.0 : -(distance_center - otherDistance) / 2.0;
+        }		  		  		  
+      }
+    }
+    return vectorToReturn;
     // Point p_left = box( p - Point( 1, 0 ) );
     // Point p_right = box( p + Point( 1, 0 ) );
     // Point p_down = box( p - Point( 0, 1 ) );
     // Point p_up = box( p + Point( 0, 1 ) );
-	// Point p_front = box( p + Point
+    // Point p_front = box( p + Point
     // Value d2_center = distance2( p );
     // Value d2_left = distance2( p_left );
     // Value d2_right = distance2( p_right );
@@ -216,8 +286,34 @@ public:
     // //   / ( 2.0 * ( py2[ 1 ] - py1[ 1 ] ) );
     // // return RealVector( -gx, -gy );
   }
-  
+
   Value computeDistance2( const Point& p )
+  {
+    typedef typename DistanceTraversal::Node          Node;
+    typedef typename DistanceTraversal::ConstIterator ConstIterator;
+    Value           last = NumberTraits<Value>::ZERO;
+    Value             m  = NumberTraits<Value>::ZERO;
+    Value             d2 = NumberTraits<Value>::ZERO;
+    Vector shift = p - myP0;
+    for ( ConstIterator it = myTraversal.begin(), itE = myTraversal.end(); it != itE; ++it )
+      {
+        const Node& node = *it;
+        if ( ( node.second != last ) // all the vertices of the same layer have been processed. 
+             && ( m >= myMass ) ) break;
+        if ( node.second > myRMax ) { break; } // { d2 = m * myRMax; break; }
+        Point q = node.first + shift;
+        if ( myMeasure.domain().isInside( q ) )
+        {
+          Value mpt  = myMeasure( q );
+          d2        += mpt * node.second * node.second; 
+          m         += mpt;
+          last       = node.second;
+        }
+      }
+    return m > 0 ? d2 / m : myRMax * myRMax;
+  }
+  
+  Value computeDistance2Naive( const Point& p )
   {
     typedef ExactPredicateLpSeparableMetric<Space,2> Distance;
     typedef DistanceToPointFunctor<Distance>         DistanceToPoint;
@@ -236,13 +332,13 @@ public:
     unsigned long nbSurfels = 0;
     Value last = d2pfct( p );
     MyNode node;
-    trace.info() << p << endl;
+    // trace.info() << p << endl;
     while ( ! visitor.finished() )
     {
       node = visitor.current();
       if ( ( node.second != last ) // all the vertices of the same layer have been processed. 
            && ( m >= myMass ) ) break;
-      if ( node.second > myR2Max ) { d2 = m * myR2Max; break; }
+      if ( node.second > myRMax ) { break; }
       if ( myMeasure.domain().isInside( node.first ) )
         {
           Value mpt  = myMeasure( node.first );
@@ -254,14 +350,16 @@ public:
       else
         visitor.ignore();
     }
-    return d2 / m;
+    return m > 0 ? d2 / m : myRMax * myRMax;
   }
 
 public:
   Value myMass;
   const ImageFct& myMeasure;
   ImageFct myDistance2;
-  Value myR2Max;
+  Value myRMax;
+  DistanceTraversal myTraversal;
+  Point             myP0;
 };
 
 
@@ -438,7 +536,8 @@ int main( int argc, char** argv )
   for ( GrayLevelImage3D::ConstIterator it = img.begin(), itE = img.end();
         it != itE; ++it )
     {
-      float v = ((float)*it) / 255.0;
+      float v = 2.0 * ((float)*it) / seuil; // 255.0;
+      v = std::min( 255.0f, v );
       *outIt++ = v;
     }
   trace.beginBlock( "Computing delta-distance." );
@@ -526,11 +625,12 @@ int main( int argc, char** argv )
       float display = tubular2 <= bound ? 0.0f : ( tubular2 - bound ) / (1.0f - bound);
       //: eval[ 1 ] / ( 1.0 + eval[ 0 ] ) / ( 1.0 + delta( p )*delta( p ) );
       //: eval[ 1 ] * eval[ 1 ] / ( 1.0 + eval[ 0 ] ) / ( 1.0 + delta( p ) );
-      trace.info() << "l0=" << eval[ 0 ] << " l1=" << eval[ 1 ]
-                   << " tub=" << tubular
-                   << " tub2=" << tubular2
-                   << " disp=" << display << std::endl;
-      if (display > 0.9f*T2 )
+      if (display > 0.01f)
+        trace.info() << "l0=" << eval[ 0 ] << " l1=" << eval[ 1 ]
+                     << " tub=" << tubular
+                     << " tub2=" << tubular2
+                     << " disp=" << display << std::endl;
+      if (display > 0.5f*T2 )
         {
           viewer << CustomColors3D( Color::Black,
                                     colormap( display > T2 ? T2 : display ) )

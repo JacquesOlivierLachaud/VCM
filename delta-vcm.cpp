@@ -67,6 +67,59 @@ namespace DGtal {
   }
 }
 
+
+/**
+* Structure to store a traversal in a graph. Useful if you have a
+* translation invariant graph and if you wish to repeat the traversal
+* from another point.
+*/
+template <typename TVisitor>
+struct TraversalReplay
+{
+  typedef TVisitor                  Visitor;
+  typedef typename Visitor::Node    Node;
+  typedef typename Visitor::Scalar  Scalar;
+  typedef typename Visitor::Vertex  Vertex;
+  typedef std::vector<Node>         Container;
+  typedef typename Container::const_iterator ConstIterator;
+
+  std::vector<Node> myNodes;
+  
+  TraversalReplay() {}
+
+  void init( Visitor& visitor, Scalar dmax )
+  {
+    myNodes.clear();
+    Node node;
+    while ( ! visitor.finished() )
+      {
+        node = visitor.current();
+        myNodes.push_back( node );
+        if ( node.second > dmax ) break;
+        visitor.expand();
+      }
+  }
+
+  struct NodeLessComparator {
+    bool operator()( const Node& n1, const Node& n2 ) const
+    {
+      return n1.second < n2.second;
+    }
+  };
+
+  ConstIterator begin() const { return myNodes.begin(); }
+  ConstIterator end() const   { return myNodes.end(); }
+  // Returns an iterator pointing to the first element which does not compare less than val.
+  ConstIterator find( Scalar val ) const 
+  {
+    Node dummy( Vertex(), val ); 
+    return std::lower_bound( begin(), end(), dummy, NodeLessComparator() );
+  }
+
+};
+
+
+
 template <typename Distance>
 struct DistanceToPointFunctor {
 
@@ -95,22 +148,38 @@ public:
   typedef typename ImageFct::Point   Point;
   typedef typename ImageFct::Domain  Domain;
   typedef typename Domain::Space     Space;
+  typedef typename Space::Vector     Vector;
   typedef typename Space::RealVector RealVector;
+
+  typedef ExactPredicateLpSeparableMetric<Space,2> Distance;
+  typedef DistanceToPointFunctor<Distance>         DistanceToPoint;
+  typedef MetricAdjacency<Space, 1>                Graph;
+  typedef DistanceBreadthFirstVisitor< Graph, DistanceToPoint, std::set<Point> > 
+  DistanceVisitor;
+  typedef TraversalReplay< DistanceVisitor >       DistanceTraversal;
 
 public:
   DistanceToMeasure( Value m0, const ImageFct& measure, Value rmax = 10.0 )
     : myMass( m0 ), myMeasure( measure ), myDistance2( myMeasure.domain() ),
-      myR2Max( rmax*rmax )
+      myRMax( rmax )
   {
     init( myMeasure );
   }
   
   void init( const ImageFct& measure )
   {
+    // Precompute traversal
+    myP0 = *( myDistance2.domain().begin() );
+    Value             m  = NumberTraits<Value>::ZERO;
+    Value             d2 = NumberTraits<Value>::ZERO;
+    Graph             graph;
+    DistanceToPoint   d2pfct( Distance(), myP0 );
+    DistanceVisitor   visitor( graph, d2pfct, myP0 );
+    myTraversal.init( visitor, myRMax );
+
     double       nb = myDistance2.domain().size();
     unsigned int i  = 0;
     trace.progressBar( i, nb );
-
     for ( typename Domain::ConstIterator it = myDistance2.domain().begin(),
             itE = myDistance2.domain().end(); it != itE; ++it, ++i )
       {
@@ -174,27 +243,40 @@ public:
     Value d2_right = distance2( p_right );
     Value d2_down = distance2( p_down );
     Value d2_up = distance2( p_up );
-    // Value gx = 
-    //   // std::min( ( d2_right - d2_left ) / ( p_right[ 0 ] - p_left[ 0 ] ),
-    //   std::min( ( d2_right - d2_center ) / ( p_right[ 0 ] - p[ 0 ] ),
-    //             ( d2_center - d2_left ) / ( p[ 0 ] - p_left[ 0 ] ) ); //  );
-    // Value gy = 
-    //   // std::min( ( d2_up - d2_down ) / ( p_up[ 1 ] - p_down[ 1 ] ),
-    //   std::min( ( d2_up - d2_center ) / ( p_up[ 1 ] - p[ 1 ] ),
-    //             ( d2_center - d2_down ) / ( p[ 1 ] - p_down[ 1 ] ) ); // );
     bool right = abs( d2_right - d2_center ) >= abs( d2_center - d2_left );
     bool up    = abs( d2_up    - d2_center ) >= abs( d2_center - d2_down );
     Value gx = right ? ( d2_right - d2_center ) : ( d2_center - d2_left );
     Value gy = up    ? ( d2_up    - d2_center ) : ( d2_center - d2_down );
     return RealVector( -gx / 2.0, -gy / 2.0 );
-    // Value gx = (distance2( px2 ) - distance2( px1 ))
-    //   / ( 2.0 * ( px2[ 0 ] - px1[ 0 ] ) );
-    // Value gy = (distance2( py2 ) - distance2( py1 ))
-    //   / ( 2.0 * ( py2[ 1 ] - py1[ 1 ] ) );
-    // return RealVector( -gx, -gy );
   }
   
   Value computeDistance2( const Point& p )
+  {
+    typedef typename DistanceTraversal::Node          Node;
+    typedef typename DistanceTraversal::ConstIterator ConstIterator;
+    Value           last = NumberTraits<Value>::ZERO;
+    Value             m  = NumberTraits<Value>::ZERO;
+    Value             d2 = NumberTraits<Value>::ZERO;
+    Vector shift = p - myP0;
+    for ( ConstIterator it = myTraversal.begin(), itE = myTraversal.end(); it != itE; ++it )
+      {
+        const Node& node = *it;
+        if ( ( node.second != last ) // all the vertices of the same layer have been processed. 
+             && ( m >= myMass ) ) break;
+        if ( node.second > myRMax ) { break; } // { d2 = m * myRMax; break; }
+        Point q = node.first + shift;
+        if ( myMeasure.domain().isInside( q ) )
+        {
+          Value mpt  = myMeasure( q );
+          d2        += mpt * node.second * node.second; 
+          m         += mpt;
+          last       = node.second;
+        }
+      }
+    return m > 0 ? d2 / m : myRMax * myRMax;
+  }
+
+  Value computeDistance2Naive( const Point& p )
   {
     typedef ExactPredicateLpSeparableMetric<Space,2> Distance;
     typedef DistanceToPointFunctor<Distance>         DistanceToPoint;
@@ -218,7 +300,7 @@ public:
       node = visitor.current();
       if ( ( node.second != last ) // all the vertices of the same layer have been processed. 
            && ( m >= myMass ) ) break;
-      if ( node.second > myR2Max ) { d2 = m * myR2Max; break; }
+      if ( node.second > myRMax ) { break; } // { d2 = m * myRMax; break; }
       if ( myMeasure.domain().isInside( node.first ) )
         {
           Value mpt  = myMeasure( node.first );
@@ -230,14 +312,16 @@ public:
       else
         visitor.ignore();
     }
-    return d2 / m;
+    return m > 0 ? d2 / m : myRMax * myRMax;
   }
 
 public:
   Value myMass;
   const ImageFct& myMeasure;
   ImageFct myDistance2;
-  Value myR2Max;
+  Value myRMax;
+  DistanceTraversal myTraversal;
+  Point             myP0;
 };
 
 /**
