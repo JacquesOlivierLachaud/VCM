@@ -236,6 +236,7 @@ public:
     unsigned long nbSurfels = 0;
     Value last = d2pfct( p );
     MyNode node;
+    trace.info() << p << endl;
     while ( ! visitor.finished() )
     {
       node = visitor.current();
@@ -306,7 +307,8 @@ struct DeltaVCM {
         if ( myDelta( p ) > myR ) continue;
         RealVector n = myDelta.projection( p );
         Point      q = Point( (Integer) round( p[ 0 ] + n[ 0 ] ),
-                              (Integer) round( p[ 1 ] + n[ 1 ] ) );
+                              (Integer) round( p[ 1 ] + n[ 1 ] ),
+                              (Integer) round( p[ 2 ] + n[ 2 ] ) );
         // eliminates projections going outside the domain.
         if ( q != myDelta.box( q ) ) continue;
         for ( Dimension i = 0; i < Space::dimension; ++i ) 
