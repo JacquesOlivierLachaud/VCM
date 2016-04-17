@@ -236,7 +236,8 @@ void chooseEstimator
       SurfelFunctor surfelFct( canonic_embedder, 1.0 );
       NormalEstimator estimator;
       estimator.attach( surface );
-      estimator.setParams( Metric(), surfelFct, fct, t );
+      const Z3i::L2Metric aMetric{};
+      estimator.setParams( aMetric, surfelFct, fct, t );
       estimator.init( 1.0, surface.begin(), surface.end() );
       trace.endBlock();
       computeEstimation( vm, K, shape, surface, estimator );
