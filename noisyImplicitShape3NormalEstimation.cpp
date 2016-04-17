@@ -259,7 +259,8 @@ int main( int argc, char** argv )
 
   // Extracts shape boundary
   Scalar noiseLevel = vm[ "noise" ].as<double>();
-  KanungoPredicate* noisifiedObject = new KanungoPredicate( *dshape, dshape->getDomain(), 
+  Domain dom = dshape->getDomain();
+  KanungoPredicate* noisifiedObject = new KanungoPredicate( *dshape, dom, 
                                                             noiseLevel );
   Surfel bel;
   try {
